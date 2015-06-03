@@ -123,4 +123,5 @@ endif(BUILD_GPU)
 ####################
 if(BUILD_STEPS)
 add_subdirectory(steps/step1)
+add_subdirectory(steps/poisson3d)
 endif(BUILD_STEPS)
