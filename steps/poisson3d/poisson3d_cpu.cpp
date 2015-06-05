@@ -32,6 +32,8 @@
 
 #include <accfft.h>
 
+#define SQR(x) ((x)*(x))
+
 enum TESTCASE {
   TESTCASE_SINE=0,
   TESTCASE_GAUSSIAN=1,
@@ -39,6 +41,8 @@ enum TESTCASE {
 };
 
 
+// =======================================================
+// =======================================================
 /*
  * testcase sine: eigenfunctions of Laplacian
  */
@@ -48,6 +52,8 @@ double testcase_sine(double x,double y, double z){
 
 } // testcase_sine
 
+// =======================================================
+// =======================================================
 /*
  * testcase gaussian
  */
@@ -57,6 +63,8 @@ double testcase_gaussian(double x,double y, double z, double alpha){
 
 } // testcase_gaussian
 
+// =======================================================
+// =======================================================
 /*
  * testcase uniform ball
  */
@@ -71,9 +79,9 @@ double testcase_uniform_ball(double x,  double y,  double z,
 
 } // testcase_uniform_ball
 
-// void check_err(double* a,int*n,MPI_Comm c_comm);
 
-
+// =======================================================
+// =======================================================
 template<const TESTCASE testcase_id>
 void initialize(double *a, int *n, MPI_Comm c_comm, GetPot &params)
 {
@@ -129,6 +137,8 @@ void initialize(double *a, int *n, MPI_Comm c_comm, GetPot &params)
   return;
 } // end initialize
 
+// =======================================================
+// =======================================================
 /*
  * FFT-based poisson solver.
  *
@@ -175,7 +185,9 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
   accfft_init(nthreads);
   setup_time=-MPI_Wtime();
   /* Create FFT plan */
-  accfft_plan * plan=accfft_plan_dft_3d_r2c(n,data,(double*)data_hat,c_comm,ACCFFT_MEASURE);
+  accfft_plan * plan = accfft_plan_dft_3d_r2c(n,
+					      data, (double*)data_hat,
+					      c_comm, ACCFFT_MEASURE);
   setup_time+=MPI_Wtime();
 
   /*  Initialize data */
@@ -248,6 +260,8 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
 
 } // end poisson_solve
 
+// =======================================================
+// =======================================================
 // void check_err(double* a,int*n,MPI_Comm c_comm){
 //   int nprocs, procid;
 //   MPI_Comm_rank(c_comm, &procid);
@@ -294,6 +308,20 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
 //   }
 
 // } // end check_err
+
+// =======================================================
+// =======================================================
+/*
+ * Poisson fourier filter.
+ * Divide fourier coefficients by -(kx^2+ky^2+kz^2).
+ */
+void poisson_fourier_filter(Complex *data_hat, 
+			    int N[3],
+			    int isize[3], int istart[3],
+			    int testcase) {
+  /* TODO */
+
+} // fourier_filter
 
 /******************************************************/
 /******************************************************/
