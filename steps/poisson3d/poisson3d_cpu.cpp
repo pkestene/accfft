@@ -326,7 +326,9 @@ int main(int argc, char **argv)
       std::cerr << "Wrong test case. Must be integer < 2 !!!\n";
     }
   } else {
-    std::cout << "Using test case number : " << testCaseNb << std::endl;
+    if (procid == 0) {
+      std::cout << "Using test case number : " << testCaseNb << std::endl;
+    }
   }
 
 
