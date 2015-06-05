@@ -45,22 +45,70 @@ void accfft_cleanup(){
   fftw_cleanup();
 }
 
-int dfft_get_local_size(int N0, int N1, int N2, int * isize, int * istart,MPI_Comm c_comm ){
+/**
+ * Compute local sub-domain sizes and offsets (istart).
+ *
+ * \param[in]  N0 global size along X (row-major memory layout)
+ * \param[in]  N1 global size along Y (row-major memory layout)
+ * \param[in]  N2 global size along Z (row-major memory layout)
+ * \param[out] isize local size array of input data (before FFT)
+ * \param[out] istart offset where local data starts in global domain
+ * \param[in]  c_comm MPI communicateur
+ */
+int dfft_get_local_size(int N0, int N1, int N2,
+			int * isize, int * istart,
+			MPI_Comm c_comm ) {
+
   int nprocs, procid;
   MPI_Comm_rank(c_comm, &procid);
 
+  /* retrieve MPI Cartesian topology local information */
   int coords[2],np[2],periods[2];
   MPI_Cart_get(c_comm,2,np,periods,coords);
-  isize[2]=N2;
-  isize[0]=ceil(N0/(double)np[0]);
-  isize[1]=ceil(N1/(double)np[1]);
 
-  istart[0]=isize[0]*(coords[0]);
-  istart[1]=isize[1]*(coords[1]);
-  istart[2]=0;
+  if (0) {
+    isize[0]=ceil(N0/(double)np[0]);
+    isize[1]=ceil(N1/(double)np[1]);
+    isize[2]=N2;
+    
+    istart[0]=isize[0]*(coords[0]);
+    istart[1]=isize[1]*(coords[1]);
+    istart[2]=0;
+    
+    /* last pieces might need to adjust their size, which can even be zero ! */
+    if ( (N0-isize[0]*coords[0]) < isize[0] ) {
+      isize[0]=N0-isize[0]*coords[0]; 
+      isize[0]*=(int) isize[0]>0; 
+      istart[0]=N0-isize[0];
+    }
+    
+    if ( (N1-isize[1]*coords[1]) < isize[1] ) {
+      isize[1]=N1-isize[1]*coords[1];
+      isize[1]*=(int) isize[1]>0;
+      istart[1]=N1-isize[1];
+    }
+  }
 
-  if((N0-isize[0]*coords[0])<isize[0]) {isize[0]=N0-isize[0]*coords[0]; isize[0]*=(int) isize[0]>0; istart[0]=N0-isize[0];}
-  if((N1-isize[1]*coords[1])<isize[1]) {isize[1]=N1-isize[1]*coords[1]; isize[1]*=(int) isize[1]>0; istart[1]=N1-isize[1];}
+  if (1) {
+
+    // adjust sizes when N0 (resp. N1) is not a multiple of np[0] (resp. np[1])
+    // compute the quotient / remainder of integer division
+    int q[2], r[2];
+    q[0] = floor(N0/(double)np[0]);
+    q[1] = floor(N1/(double)np[1]);
+    r[0] = N0 - q[0] * np[0];
+    r[1] = N1 - q[1] * np[1];
+
+    // adjust isize so that there is only a difference of 1 in size
+    isize[0] = coords[0] < r[0] ? q[0]+1 : q[0];
+    isize[1] = coords[1] < r[1] ? q[1]+1 : q[1];
+    isize[2] = N2;
+    
+    istart[0] = coords[0] < r[0] ? (q[0]+1)*coords[0] : (q[0]+1)*r[0] + q[0]*(coords[0]-r[0]);
+    istart[1] = coords[1] < r[1] ? (q[1]+1)*coords[1] : (q[1]+1)*r[1] + q[1]*(coords[1]-r[1]);
+    istart[2] = 0;
+
+  }
 
 
   if(VERBOSE>=2){
@@ -78,7 +126,8 @@ int dfft_get_local_size(int N0, int N1, int N2, int * isize, int * istart,MPI_Co
 
 
   return alloc_local;
-}
+} // dfft_get_local_size
+
 int accfft_local_size_dft_r2c( int * n,int * isize, int * istart, int * osize, int *ostart,MPI_Comm c_comm, bool inplace){
 
   //1D & 2D Decomp
