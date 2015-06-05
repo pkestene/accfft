@@ -6,6 +6,7 @@ add_subdirectory(cnpy)
 #include_directories(${MPI_INCLUDE_PATH})
 include_directories(${FFTW_INCLUDE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/cnpy)
 
 # source files list
 set(poisson3d_cpu_SRCS
@@ -19,6 +20,7 @@ add_executable(poisson3d_cpu ${poisson3d_cpu_SRCS})
 target_link_libraries(poisson3d_cpu
   accfft
   ${FFTW_LIBRARIES}
+  cnpy
 )
 
 #

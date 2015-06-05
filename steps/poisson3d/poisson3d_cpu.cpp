@@ -32,6 +32,9 @@
 
 #include <accfft.h>
 
+#include <string>
+#include <cnpy.h>
+
 #define SQR(x) ((x)*(x))
 
 enum TESTCASE {
@@ -112,15 +115,19 @@ void initialize(double *a, int *n, MPI_Comm c_comm, GetPot &params)
 #pragma omp parallel
   {
     double X,Y,Z;
+    double x0    = 0.5;
+    double y0    = 0.5;
+    double z0    = 0.5;
     long int ptr;
 #pragma omp for
     for (int i=0; i<isize[0]; i++){
       for (int j=0; j<isize[1]; j++){
         for (int k=0; k<isize[2]; k++){
-          X=2*pi/n[0]*(i+istart[0]);
-          Y=2*pi/n[1]*(j+istart[1]);
-          Z=2*pi/n[2]*k;
-          ptr=i*isize[1]*n_tuples+j*n_tuples+k;
+          X = 1.0*(i+istart[0])/n[0] - x0;
+          Y = 1.0*(j+istart[1])/n[1] - y0;
+          Z = 1.0*(k+istart[2])/n[2] - z0;
+
+          ptr = i*isize[1]*n_tuples + j*n_tuples + k;
 
 	  if (testcase_id == TESTCASE_SINE) {
 	    a[ptr]=testcase_sine(X,Y,Z);
@@ -136,6 +143,120 @@ void initialize(double *a, int *n, MPI_Comm c_comm, GetPot &params)
   }
   return;
 } // end initialize
+
+// =======================================================
+// =======================================================
+/*
+ * Poisson fourier filter.
+ * Divide fourier coefficients by -(kx^2+ky^2+kz^2).
+ */
+void poisson_fourier_filter(Complex *data_hat, 
+			    int N[3],
+			    int isize[3], int istart[3],
+			    int methodNb) {
+
+  double NX = N[0];
+  double NY = N[1];
+  double NZ = N[2];
+  
+  double Lx=1.0;
+  double Ly=1.0;
+  double Lz=1.0;
+
+  double dx = Lx/NX;
+  double dy = Ly/NY;
+  double dz = Lz/NZ;
+
+  for (int i=0; i < isize[0]; i++) {
+    for (int j=0; j < isize[1]; j++) {
+      for (int k=0; k < isize[2]; k++) {
+	
+	double kx = istart[0]+i;
+	double ky = istart[1]+j;
+	double kz = istart[2]+k;
+
+	double kkx = (double) kx;
+	double kky = (double) ky;
+	double kkz = (double) kz;
+
+	if (kx>NX/2)
+	  kkx -= NX;
+	if (ky>NY/2)
+	  kky -= NY;
+	if (kz>NZ/2)
+	  kkz -= NZ;
+
+	int index = i*isize[1]*isize[2]+j*isize[2]+k;
+
+	double scaleFactor = 0.0;
+
+	if (methodNb==0) {
+	  
+	  /*
+	   * method 0 (from Numerical recipes)
+	   */
+	  
+	  scaleFactor=2*( 
+			 (cos(1.0*2*M_PI*kx/NX) - 1)/(dx*dx) + 
+			 (cos(1.0*2*M_PI*ky/NY) - 1)/(dy*dy) + 
+			 (cos(1.0*2*M_PI*kz/NZ) - 1)/(dz*dz) )*(NX*NY*NZ);
+	  
+	  
+	} else if (methodNb==1) {
+	  
+	  /*
+	   * method 1 (just from Continuous Fourier transform of 
+	   * Poisson equation)
+	   */
+	  scaleFactor=-4*M_PI*M_PI*(kkx*kkx + kky*kky + kkz*kkz)*NX*NY*NZ;
+
+	}
+
+
+	if (kx!=0 or ky!=0 or kz!=0) {
+	  data_hat[index][0] /= scaleFactor;
+	  data_hat[index][1] /= scaleFactor;
+	} else { // enforce mean value is zero
+	  data_hat[index][0] = 0.0;
+	  data_hat[index][1] = 0.0;
+	}
+
+      }
+    }
+  }
+
+
+} // fourier_filter
+
+// =======================================================
+// =======================================================
+/*
+ * Poisson fourier filter.
+ * Divide fourier coefficients by -(kx^2+ky^2+kz^2).
+ */
+void save_cnpy(double *data, 
+	       int N[3],
+	       int isize[3], int istart[3],
+	       const char * filename) {
+
+  int NX = N[0];
+  int NY = N[1];
+  int NZ = N[2];
+
+  unsigned int shape_scalar[] = {3};
+  
+  cnpy::npz_save(filename,"N_global",N,shape_scalar,1,"w"); //"w" overwrites any existing file
+  cnpy::npz_save(filename,"isize",isize,shape_scalar,1,"a");
+  cnpy::npz_save(filename,"istart",istart,shape_scalar,1,"a");
+
+
+  {
+    const unsigned int shape[] = {isize[2],isize[1],isize[0]};
+
+    cnpy::npz_save(filename,"data",data,shape,3,"a");
+  }
+
+} // save_cnpy
 
 // =======================================================
 // =======================================================
@@ -160,6 +281,11 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
 
   printf("[mpi rank %d] c_dims = %d %d\n", procid, c_dims[0], c_dims[1]);
 
+  // which method ? variant of FFT-based Poisson solver : 0 or 1
+  const int methodNb   = params.follow(0, "--method");
+  if (procid==0)
+    printf("Using Fourier filter method %d\n",methodNb);
+
   double *data;
   Complex *data_hat;
   double f_time=0*MPI_Wtime(),i_time=0, setup_time=0;
@@ -169,12 +295,12 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
   /* Get the local pencil size and the allocation size */
   alloc_max=accfft_local_size_dft_r2c(n,isize,istart,osize,ostart,c_comm);
 
-  printf("[mpi rank %d] isize %d %d %d osize %d %d %d\n", procid,
+  printf("[mpi rank %d] isize  %3d %3d %3d osize  %3d %3d %3d\n", procid,
 	 isize[0],isize[1],isize[2],
 	 osize[0],osize[1],osize[2]
 	 );
 
-  printf("[mpi rank %d] istart %d %d %d ostart %d %d %d\n", procid,
+  printf("[mpi rank %d] istart %3d %3d %3d ostart %3d %3d %3d\n", procid,
 	 istart[0],istart[1],istart[2],
 	 ostart[0],ostart[1],ostart[2]
 	 );
@@ -204,6 +330,16 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
   }
   MPI_Barrier(c_comm);
 
+  // optional : save input data
+  {
+    std::ostringstream mpiRankString;
+    mpiRankString.width(5);
+    mpiRankString.fill('0');
+    mpiRankString << procid ;
+    std::string filename = "data_in_" + mpiRankString.str() + ".npz";
+    save_cnpy(data, n, isize, istart, filename.c_str());
+  }
+
   /* 
    * Perform forward FFT 
    */
@@ -214,9 +350,9 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
   MPI_Barrier(c_comm);
 
   /* 
-   * here perform fourier filter associated to poisson ... TODO 
+   * here perform fourier filter associated to poisson ...
    */
-
+  poisson_fourier_filter(data_hat, n, plan->osize_2, plan->ostart_2, methodNb);
 
   /* 
    * Perform backward FFT 
@@ -226,18 +362,28 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
   accfft_execute_c2r(plan,data_hat,data2);
   i_time+=MPI_Wtime();
 
-  /* Check Error */
-  double err=0,g_err=0;
-  double norm=0,g_norm=0;
-  for (int i=0;i<isize[0]*isize[1]*isize[2];++i){
-    err+=data2[i]/n[0]/n[1]/n[2]-data[i];
-    norm+=data2[i]/n[0]/n[1]/n[2];
+  /* optional : save output data */
+  {
+    std::ostringstream mpiRankString;
+    mpiRankString.width(5);
+    mpiRankString.fill('0');
+    mpiRankString << procid ;
+    std::string filename = "data_out_" + mpiRankString.str() + ".npz";
+    save_cnpy(data2, n, isize, istart, filename.c_str() );
   }
-  MPI_Reduce(&err,&g_err,1, MPI_DOUBLE, MPI_MAX,0, MPI_COMM_WORLD);
-  MPI_Reduce(&norm,&g_norm,1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
 
-  PCOUT<<"\n Error is "<<g_err<<std::endl;
-  PCOUT<<"Relative Error is "<<g_err/g_norm<<std::endl;
+  /* Check Error */
+  // double err=0,g_err=0;
+  // double norm=0,g_norm=0;
+  // for (int i=0;i<isize[0]*isize[1]*isize[2];++i){
+  //   err+=data2[i]/n[0]/n[1]/n[2]-data[i];
+  //   norm+=data2[i]/n[0]/n[1]/n[2];
+  // }
+  // MPI_Reduce(&err,&g_err,1, MPI_DOUBLE, MPI_MAX,0, MPI_COMM_WORLD);
+  // MPI_Reduce(&norm,&g_norm,1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
+
+  // PCOUT<<"\n Error is "<<g_err<<std::endl;
+  // PCOUT<<"Relative Error is "<<g_err/g_norm<<std::endl;
 
   /* Compute some timings statistics */
   double g_f_time, g_i_time, g_setup_time;
@@ -256,7 +402,8 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
   accfft_destroy_plan(plan);
   accfft_cleanup();
   MPI_Comm_free(&c_comm);
-  return ;
+
+  return;
 
 } // end poisson_solve
 
@@ -309,19 +456,6 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
 
 // } // end check_err
 
-// =======================================================
-// =======================================================
-/*
- * Poisson fourier filter.
- * Divide fourier coefficients by -(kx^2+ky^2+kz^2).
- */
-void poisson_fourier_filter(Complex *data_hat, 
-			    int N[3],
-			    int isize[3], int istart[3],
-			    int testcase) {
-  /* TODO */
-
-} // fourier_filter
 
 /******************************************************/
 /******************************************************/
@@ -343,9 +477,6 @@ int main(int argc, char **argv)
   NZ = cl.follow(128,    "--nz");
 
   int N[3]={NX,NY,NZ};
-
-  // which method ? variant of FFT-based Poisson solver : 0 or 1
-  const int methodNb   = cl.follow(0, "--method");
 
   // test case number
   const int testCaseNb = cl.follow(TESTCASE_SINE, "--testcase");
