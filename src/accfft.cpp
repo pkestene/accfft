@@ -126,9 +126,24 @@ int dfft_get_local_size(int N0, int N1, int N2,
 
 
   return alloc_local;
+
 } // dfft_get_local_size
 
-int accfft_local_size_dft_r2c( int * n,int * isize, int * istart, int * osize, int *ostart,MPI_Comm c_comm, bool inplace){
+/**
+ * Compute local sub-domain sizes and offsets (istart) for a r2c transform.
+ *
+ * \param[in]  n array of global sizes along X,Y,Z (row-major memory layout)
+ * \param[out] isize local size array of input data (before FFT)
+ * \param[out] istart offset where local data starts in global domain
+ * \param[out] osize local size array of input data (after FFT)
+ * \param[out] ostart offset where local data starts in global domain
+ * \param[in]  c_comm MPI cartesian communicateur
+ * \param[in]  inplace boolean value for reusing input buffer as output
+ */
+int accfft_local_size_dft_r2c(int * n, 
+			      int * isize, int * istart, 
+			      int * osize, int * ostart,
+			      MPI_Comm c_comm, bool inplace){
 
   //1D & 2D Decomp
   int osize_0[3]={0}, ostart_0[3]={0};
@@ -146,6 +161,7 @@ int accfft_local_size_dft_r2c( int * n,int * isize, int * istart, int * osize, i
   alloc_local=dfft_get_local_size(n[1],n_tuples/2,n[0],osize_2,ostart_2,c_comm);
   alloc_max=std::max(alloc_max, alloc_local*2);
 
+  // setup the right sizes / start offsets in the original coordinate system
   std::swap(osize_1[1],osize_1[2]);
   std::swap(ostart_1[1],ostart_1[2]);
 
@@ -154,11 +170,13 @@ int accfft_local_size_dft_r2c( int * n,int * isize, int * istart, int * osize, i
   std::swap(osize_2[1],osize_2[2]);
   std::swap(osize_2[0],osize_2[1]);
 
+  // setup input data sizes / start offsets
   //isize[0]=osize_0[0];
   //isize[1]=osize_0[1];
   //isize[2]=n[2];//osize_0[2];
   dfft_get_local_size(n[0],n[1],n[2],isize,istart,c_comm);
 
+  // output sizes / start offset after the last 1D FFT stage
   osize[0]=osize_2[0];
   osize[1]=osize_2[1];
   osize[2]=osize_2[2];
@@ -169,14 +187,29 @@ int accfft_local_size_dft_r2c( int * n,int * isize, int * istart, int * osize, i
 
   return alloc_max;
 
-}
+} // accfft_local_size_dft_r2c
 
-accfft_plan*  accfft_plan_dft_3d_r2c(int * n, double * data, double * data_out, MPI_Comm c_comm,unsigned flags){
+/**
+ * Create a 3d fft plan for a R2C transform.
+ *
+ * \param[in]  n array of global sizes along X,Y,Z (row-major memory layout)
+ * \param[in,out] data input data (also output if inplace is true)
+ * \param[out]    data_out output data
+ * \param[in]  c_comm MPI cartesian communicateur
+ *
+ * \return a dft plan for a 3D R2C transform
+ */
+accfft_plan*  accfft_plan_dft_3d_r2c(int * n, 
+				     double * data, double * data_out, 
+				     MPI_Comm c_comm, unsigned flags) {
   accfft_plan *plan=new accfft_plan;
   int nprocs, procid;
   MPI_Comm_rank(c_comm, &procid);
   plan->procid=procid;
+
+  /* retrieve MPI Cartesian topology local information */
   MPI_Cart_get(c_comm,2,plan->np,plan->periods,plan->coord);
+
   plan->c_comm=c_comm;
   int *coord=plan->coord;
   MPI_Comm_split(c_comm,coord[0],coord[1],&plan->row_comm);
@@ -419,9 +452,22 @@ accfft_plan*  accfft_plan_dft_3d_r2c(int * n, double * data, double * data_out, 
   }
   return plan;
 
-}
+} // accfft_plan_dft_3d_r2c
 
-int accfft_local_size_dft_c2c( int * n,int * isize, int * istart, int * osize, int *ostart,MPI_Comm c_comm){
+/**
+ * Compute local sub-domain sizes and offsets (istart) for a C2C transform.
+ *
+ * \param[in]  n array of global sizes along X,Y,Z (row-major memory layout)
+ * \param[out] isize local size array of input data (before FFT)
+ * \param[out] istart offset where local data starts in global domain
+ * \param[out] osize local size array of input data (after FFT)
+ * \param[out] ostart offset where local data starts in global domain
+ * \param[in]  c_comm MPI cartesian communicateur
+ */
+int accfft_local_size_dft_c2c(int * n,
+			      int * isize, int * istart,
+			      int * osize, int * ostart,
+			      MPI_Comm c_comm) {
 
   int osize_0[3]={0}, ostart_0[3]={0};
   int osize_1[3]={0}, ostart_1[3]={0};
@@ -439,6 +485,7 @@ int accfft_local_size_dft_c2c( int * n,int * isize, int * istart, int * osize, i
   alloc_max=std::max(alloc_max, alloc_local);
   alloc_max*=2; // because of c2c
 
+  // setup the right sizes / start offsets in the original coordinate system
   std::swap(osize_1[1],osize_1[2]);
   std::swap(ostart_1[1],ostart_1[2]);
 
@@ -454,11 +501,13 @@ int accfft_local_size_dft_c2c( int * n,int * isize, int * istart, int * osize, i
     ostart_2i[i]=ostart_2[i];
   }
 
+  // setup input data sizes / start offsets
   //isize[0]=osize_0[0];
   //isize[1]=osize_0[1];
   //isize[2]=n[2];//osize_0[2];
   dfft_get_local_size(n[0],n[1],n[2],isize,istart,c_comm);
 
+  // output sizes / start offset after the last 1D FFT stage
   osize[0]=osize_2[0];
   osize[1]=osize_2[1];
   osize[2]=osize_2[2];
@@ -469,8 +518,21 @@ int accfft_local_size_dft_c2c( int * n,int * isize, int * istart, int * osize, i
 
   return alloc_max;
 
-}
-accfft_plan*  accfft_plan_dft_3d_c2c(int * n, Complex * data, Complex * data_out, MPI_Comm c_comm,unsigned flags){
+} // accfft_local_size_dft_c2c
+
+/**
+ * Create a 3d fft plan for a C2C transform.
+ *
+ * \param[in]  n array of global sizes along X,Y,Z (row-major memory layout)
+ * \param[in,out] data input data (also output if inplace is true)
+ * \param[out]    data_out output data
+ * \param[in]  c_comm MPI cartesian communicateur
+ *
+ * \return a dft plan for a 3D C2C transform
+ */
+accfft_plan*  accfft_plan_dft_3d_c2c(int * n,
+				     Complex * data, Complex * data_out,
+				     MPI_Comm c_comm, unsigned flags) {
   accfft_plan *plan=new accfft_plan;
   int nprocs, procid;
   MPI_Comm_rank(c_comm, &procid);
@@ -691,18 +753,19 @@ accfft_plan*  accfft_plan_dft_3d_c2c(int * n, Complex * data, Complex * data_out
   }
   return plan;
 
-}
+} // accfft_plan_dft_3d_c2c
 
 void accfft_execute_r2c(accfft_plan* plan, double * data,Complex * data_out, double * timer){
   accfft_execute(plan,-1,data,(double*)data_out,timer);
 
   return;
-}
+} // accfft_execute_r2c
+
 void accfft_execute_c2r(accfft_plan* plan, Complex * data,double * data_out, double * timer){
   accfft_execute(plan,1,(double*)data,data_out,timer);
 
   return;
-}
+} // accfft_execute_c2r
 
 void accfft_execute(accfft_plan* plan, int direction,double * data,double * data_out, double * timer){
 
@@ -837,7 +900,8 @@ void accfft_execute(accfft_plan* plan, int direction,double * data,double * data
   MPI_Barrier(plan->c_comm);
 
   return;
-}
+} // accfft_execute
+
 void accfft_execute_c2c(accfft_plan* plan, int direction,Complex * data, Complex * data_out, double * timer){
 
   if(data==NULL)
@@ -969,7 +1033,8 @@ void accfft_execute_c2c(accfft_plan* plan, int direction,Complex * data, Complex
   MPI_Barrier(plan->c_comm);
 
   return;
-}
+} // accfft_execute_c2c
+
 void accfft_destroy_plan(accfft_plan * plan){
 
   if(plan->T_plan_1!=NULL)delete(plan->T_plan_1);
@@ -986,4 +1051,5 @@ void accfft_destroy_plan(accfft_plan * plan){
 
   MPI_Comm_free(&plan->row_comm);
   MPI_Comm_free(&plan->col_comm);
-}
+
+} // accfft_destroy_plan
