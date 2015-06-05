@@ -1,3 +1,7 @@
+# cnpy allow us to dump data in Numpy format:
+# easy to read in python, just use numpy.load
+add_subdirectory(cnpy)
+
 # include dirs
 #include_directories(${MPI_INCLUDE_PATH})
 include_directories(${FFTW_INCLUDE_DIR})
