@@ -15,9 +15,14 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/cnpy)
 
 # source files list
-set(poisson3d_cpu_SRCS
+set (poisson3d_cpu_SRCS
   poisson3d_cpu.cpp
 )
+
+if (PNETCDF_FOUND)
+  set (poisson3d_cpu_SRCS ${poisson3d_cpu_SRCS} pnetcdf/pnetcdf_io.cpp)
+  include_directories(${PNETCDF_INCLUDES})
+endif()
 
 #
 # CPU executable
@@ -28,6 +33,9 @@ target_link_libraries(poisson3d_cpu
   ${FFTW_LIBRARIES}
   cnpy
 )
+if (PNETCDF_FOUND)
+  target_link_libraries(poisson3d_cpu ${PNETCDF_LIBRARIES})
+endif()
 
 #
 # GPU executable

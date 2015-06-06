@@ -35,6 +35,10 @@
 #include <string>
 #include <cnpy.h>
 
+#ifdef USE_PNETCDF
+#include "pnetcdf/pnetcdf_io.h"
+#endif // USE_PNETCDF
+
 #define SQR(x) ((x)*(x))
 
 enum TESTCASE {
@@ -331,6 +335,18 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
   MPI_Barrier(c_comm);
 
   // optional : save input data
+#ifdef USE_PNETCDF
+  {
+    std::string filename = "data_in.nc";
+    MPI_Offset istart_mpi[3] = { istart[0], istart[1], istart[2] }; 
+    MPI_Offset isize_mpi[3]  = { isize[0],  isize[1],  isize[2] }; 
+    write_pnetcdf(filename,
+		  istart_mpi,
+		  isize_mpi,
+		  n,
+		  data);
+  }
+#else
   {
     std::ostringstream mpiRankString;
     mpiRankString.width(5);
@@ -339,6 +355,7 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
     std::string filename = "data_in_" + mpiRankString.str() + ".npz";
     save_cnpy(data, n, isize, istart, filename.c_str());
   }
+#endif // USE_PNETCDF
 
   /* 
    * Perform forward FFT 
@@ -363,6 +380,18 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
   i_time+=MPI_Wtime();
 
   /* optional : save output data */
+#ifdef USE_PNETCDF
+  {
+    std::string filename = "data_out.nc";
+    MPI_Offset istart_mpi[3] = { istart[0], istart[1], istart[2] }; 
+    MPI_Offset isize_mpi[3]  = { isize[0],  isize[1],  isize[2] }; 
+    write_pnetcdf(filename,
+		  istart_mpi,
+		  isize_mpi,
+		  n,
+		  data2);
+  }
+#else
   {
     std::ostringstream mpiRankString;
     mpiRankString.width(5);
@@ -371,6 +400,7 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
     std::string filename = "data_out_" + mpiRankString.str() + ".npz";
     save_cnpy(data2, n, isize, istart, filename.c_str() );
   }
+#endif // USE_PNETCDF
 
   /* Check Error */
   // double err=0,g_err=0;
