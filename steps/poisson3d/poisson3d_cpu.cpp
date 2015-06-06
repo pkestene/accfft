@@ -163,9 +163,9 @@ void poisson_fourier_filter(Complex *data_hat,
   double NY = N[1];
   double NZ = N[2];
   
-  double Lx=1.0;
-  double Ly=1.0;
-  double Lz=1.0;
+  double Lx = 1.0;
+  double Ly = 1.0;
+  double Lz = 1.0;
 
   double dx = Lx/NX;
   double dy = Ly/NY;
@@ -403,17 +403,92 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
 #endif // USE_PNETCDF
 
   /* Check Error */
-  // double err=0,g_err=0;
-  // double norm=0,g_norm=0;
-  // for (int i=0;i<isize[0]*isize[1]*isize[2];++i){
-  //   err+=data2[i]/n[0]/n[1]/n[2]-data[i];
-  //   norm+=data2[i]/n[0]/n[1]/n[2];
-  // }
-  // MPI_Reduce(&err,&g_err,1, MPI_DOUBLE, MPI_MAX,0, MPI_COMM_WORLD);
-  // MPI_Reduce(&norm,&g_norm,1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
+  // {
+  //   double NX = n[0];
+  //   double NY = n[1];
+  //   double NZ = n[2];
 
-  // PCOUT<<"\n Error is "<<g_err<<std::endl;
-  // PCOUT<<"Relative Error is "<<g_err/g_norm<<std::endl;
+  //   double Lx = 1.0;
+  //   double Ly = 1.0;
+  //   double Lz = 1.0;
+    
+  //   double dx = Lx/NX;
+  //   double dy = Ly/NY;
+  //   double dz = Lz/NZ;
+
+  //   double x0    = 0.5;
+  //   double y0    = 0.5;
+  //   double z0    = 0.5;
+  //   long int ptr;
+
+  //   /*
+  //    * testcase gaussian parameters
+  //    */
+  //   double alpha=1.0;
+  //   if (testCaseNb == TESTCASE_GAUSSIAN)
+  //     alpha = params.follow(1.0,    "--alpha");
+    
+  //   /*
+  //    * testcase uniform ball parameters
+  //    */
+  //   // uniform ball function center
+  //   double xC = params.follow((double) 0.0, "--xC");
+  //   double yC = params.follow((double) 0.0, "--yC");
+  //   double zC = params.follow((double) 0.0, "--zC");
+    
+  //   // uniform ball radius
+  //   double R = params.follow(0.02, "--radius");
+
+  //   double err=0,g_err=0;
+  //   double norm=0,g_norm=0;
+  //   for (int i=0; i<isize[0]; i++) {
+  //     for (int j=0; j<isize[1]; j++) {
+  // 	for (int k=0; k<isize[2]; k++) {
+
+  // 	  double x,y,z;
+  // 	  x = 1.0*(i+istart[0])/n[0] - x0;
+  //         y = 1.0*(j+istart[1])/n[1] - y0;
+  //         z = 1.0*(k+istart[2])/n[2] - z0;
+
+  // 	  double exact = 0.0;
+	  
+  // 	  if (testCaseNb==TESTCASE_SINE) {
+	    
+  // 	    exact =  - sin(2*M_PI*x) * sin(2*M_PI*y) * sin(2*M_PI*z) /
+  // 	      ( (4*M_PI*M_PI)*(1.0/Lx/Lx + 1.0/Ly/Ly + 1.0/Lz/Lz) );
+	    
+  // 	  } else if (testCaseNb==TESTCASE_GAUSSIAN) {
+	    
+  // 	    exact = exp(-alpha*(x*x+y*y+z*z));
+	    
+  // 	  } else if (testCaseNb==TESTCASE_UNIFORM_BALL) {
+	    	    
+  // 	    double r = sqrt( (x-xC)*(x-xC) + (y-yC)*(y-yC) + (z-zC)*(z-zC) );
+	    
+  // 	    if ( r < R ) {
+  // 	      exact = r*r/6.0;
+  // 	    } else {
+  // 	      exact = -R*R*R/(3*r)+R*R/2.0;
+  // 	    }
+
+  // 	  } /* end testCase */
+	  
+  // 	  ptr = i*isize[1]*isize[2] + j*isize[2] + k;
+	  	  
+  // 	  err  += SQR(data2[ptr]-exact);
+  // 	  norm += SQR(data2[ptr]);
+
+  // 	} // end for k
+  //     } // end for j
+  //   } // end for i
+  
+  //   MPI_Reduce(&err,&g_err,1, MPI_DOUBLE, MPI_MAX,0, MPI_COMM_WORLD);
+  //   MPI_Reduce(&norm,&g_norm,1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
+    
+  //   PCOUT<<"\n Error  is "<<g_err<<std::endl;
+  //   PCOUT<<" g_norm is "<<g_norm<<std::endl;
+  //   PCOUT<<"Relative Error is "<<g_err/g_norm<<std::endl;
+  // }
 
   /* Compute some timings statistics */
   double g_f_time, g_i_time, g_setup_time;
