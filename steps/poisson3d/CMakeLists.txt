@@ -2,6 +2,12 @@
 # easy to read in python, just use numpy.load
 add_subdirectory(cnpy)
 
+# optional: use parallel-netcdf to dump data
+find_package(PNETCDF)
+if (PNETCDF_FOUND)
+  add_definitions (-DUSE_PNETCDF)
+endif()
+
 # include dirs
 #include_directories(${MPI_INCLUDE_PATH})
 include_directories(${FFTW_INCLUDE_DIR})
