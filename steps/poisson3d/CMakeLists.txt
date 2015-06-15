@@ -40,16 +40,28 @@ endif()
 #
 # GPU executable
 #
-# if(BUILD_GPU)
-#   set(poisson3d_gpu_SRCS
-#     poisson3d_gpu.cpp
-#   )
-#   add_executable(poisson3d_gpu ${poisson3d_gpu_SRCS})
-#   set_target_properties(poisson3d_gpu PROPERTIES COMPILE_FLAGS "-DENABLE_GPU")
-#   target_link_libraries(poisson3d_gpu
-#     accfft_gpu
-#     ${FFTW_LIBRARIES}
-#     ${CUDA_LIBRARIES}
-#   )
-#   cuda_add_cufft_to_target(poisson3d_gpu)
-# endif(BUILD_GPU)
+if(BUILD_GPU)
+  set(poisson3d_gpu_SRCS
+    poisson3d_gpu.cpp
+    )
+  
+  if (PNETCDF_FOUND)
+    set (poisson3d_gpu_SRCS ${poisson3d_gpu_SRCS} pnetcdf/pnetcdf_io.cpp)
+    include_directories(${PNETCDF_INCLUDES})
+  endif()
+
+  add_executable(poisson3d_gpu ${poisson3d_gpu_SRCS})
+  set_target_properties(poisson3d_gpu PROPERTIES COMPILE_FLAGS "-DENABLE_GPU")
+  target_link_libraries(poisson3d_gpu
+    accfft_gpu
+    ${FFTW_LIBRARIES}
+    ${CUDA_LIBRARIES}
+    cnpy
+  )
+
+  if (PNETCDF_FOUND)
+    target_link_libraries(poisson3d_gpu ${PNETCDF_LIBRARIES})
+  endif()
+
+  cuda_add_cufft_to_target(poisson3d_gpu)
+endif(BUILD_GPU)

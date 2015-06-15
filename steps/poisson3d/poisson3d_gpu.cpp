@@ -1,5 +1,5 @@
 /*
- * File: poisson3d_cpu.cpp
+ * File: poisson3d_gpu.cpp
  * Project: AccFFT
  * Created by Amir Gholami on 12/23/2014
  * Contact: contact@accfft.org
@@ -18,19 +18,21 @@
  * Test case 2:  rho(x,y,z) = ( r=sqrt(x^2+y^2+z^2) < R ) ? 1 : 0 
  *
  * Example of use:
- * ./poisson3d_cpu --nx 64 --ny 64 --nz 64 --method 1 --testcase 2
+ * ./poisson3d_gpu --nx 64 --ny 64 --nz 64 --method 1 --testcase 2
  *
  * \author Pierre Kestener
- * \date June 1st, 2015
+ * \date June 15, 2015
  */
 
 #include <stdlib.h>
 #include <math.h> // for M_PI
 #include <mpi.h>
 
+#include <cuda_runtime_api.h>
+
 #include "GetPot.h" // for command line arguments
 
-#include <accfft.h>
+#include <accfft_gpu.h>
 
 #include <string>
 #include <cnpy.h>
@@ -95,7 +97,7 @@ void initialize(double *a, int *n, MPI_Comm c_comm, GetPot &params)
   double pi=M_PI;
   int n_tuples=n[2];
   int istart[3], isize[3], osize[3],ostart[3];
-  accfft_local_size_dft_r2c(n,isize,istart,osize,ostart,c_comm);
+  accfft_local_size_dft_r2c_gpu(n,isize,istart,osize,ostart,c_comm);
 
   /*
    * testcase gaussian parameters
@@ -290,14 +292,14 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
   if (procid==0)
     printf("Using Fourier filter method %d\n",methodNb);
 
-  double *data;
+  double *data, *data_cpu;
   Complex *data_hat;
   double f_time=0*MPI_Wtime(),i_time=0, setup_time=0;
   int alloc_max=0;
 
   int isize[3],osize[3],istart[3],ostart[3];
   /* Get the local pencil size and the allocation size */
-  alloc_max=accfft_local_size_dft_r2c(n,isize,istart,osize,ostart,c_comm);
+  alloc_max=accfft_local_size_dft_r2c_gpu(n,isize,istart,osize,ostart,c_comm);
 
   printf("[mpi rank %d] isize  %3d %3d %3d osize  %3d %3d %3d\n", procid,
 	 isize[0],isize[1],isize[2],
@@ -309,32 +311,34 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
 	 ostart[0],ostart[1],ostart[2]
 	 );
 
-  data=(double*)accfft_alloc(isize[0]*isize[1]*isize[2]*sizeof(double));
-  data_hat=(Complex*)accfft_alloc(alloc_max);
+  data_cpu=(double*)malloc(isize[0]*isize[1]*isize[2]*sizeof(double));
+  //data_hat=(Complex*)accfft_alloc(alloc_max);
+  cudaMalloc((void**) &data, isize[0]*isize[1]*isize[2]*sizeof(double));
+  cudaMalloc((void**) &data_hat, alloc_max);
 
-  accfft_init(nthreads);
+  //accfft_init(nthreads);
   setup_time=-MPI_Wtime();
   /* Create FFT plan */
-  accfft_plan * plan = accfft_plan_dft_3d_r2c(n,
-					      data, (double*)data_hat,
-					      c_comm, ACCFFT_MEASURE);
+  accfft_plan_gpu * plan = accfft_plan_dft_3d_r2c_gpu(n,
+						      data, (double*)data_hat,
+						      c_comm, ACCFFT_MEASURE);
   setup_time+=MPI_Wtime();
 
   /*  Initialize data */
   switch(testCaseNb) {
   case TESTCASE_SINE:
-    initialize<TESTCASE_SINE>(data, n, c_comm, params); 
+    initialize<TESTCASE_SINE>(data_cpu, n, c_comm, params); 
     break;
   case TESTCASE_GAUSSIAN:
-    initialize<TESTCASE_GAUSSIAN>(data, n, c_comm, params); 
+    initialize<TESTCASE_GAUSSIAN>(data_cpu, n, c_comm, params); 
     break;
   case TESTCASE_UNIFORM_BALL:
-    initialize<TESTCASE_UNIFORM_BALL>(data, n, c_comm, params); 
+    initialize<TESTCASE_UNIFORM_BALL>(data_cpu, n, c_comm, params); 
     break;
   }
   MPI_Barrier(c_comm);
 
-  // optional : save input data
+  // optional : save input CPU data
 #ifdef USE_PNETCDF
   {
     std::string filename = "data_in.nc";
@@ -344,7 +348,7 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
 		  istart_mpi,
 		  isize_mpi,
 		  n,
-		  data);
+		  data_cpu);
   }
 #else
   {
@@ -353,15 +357,20 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
     mpiRankString.fill('0');
     mpiRankString << procid ;
     std::string filename = "data_in_" + mpiRankString.str() + ".npz";
-    save_cnpy(data, n, isize, istart, filename.c_str());
+    save_cnpy(data_cpu, n, isize, istart, filename.c_str());
   }
 #endif // USE_PNETCDF
+
+  // upload data to GPU
+  cudaMemcpy(data, data_cpu, 
+	     isize[0]*isize[1]*isize[2]*sizeof(double), 
+	     cudaMemcpyHostToDevice);
 
   /* 
    * Perform forward FFT 
    */
   f_time-=MPI_Wtime();
-  accfft_execute_r2c(plan,data,data_hat);
+  accfft_execute_r2c_gpu(plan,data,data_hat);
   f_time+=MPI_Wtime();
 
   MPI_Barrier(c_comm);
@@ -369,17 +378,25 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
   /* 
    * here perform fourier filter associated to poisson ...
    */
-  poisson_fourier_filter(data_hat, n, plan->osize_2, plan->ostart_2, methodNb);
+  //poisson_fourier_filter(data_hat, n, plan->osize_2, plan->ostart_2, methodNb);
 
   /* 
-   * Perform backward FFT 
+   * Perform backward FFT : data -> data2
    */
-  double * data2=(double*)accfft_alloc(isize[0]*isize[1]*isize[2]*sizeof(double));
+  double *data2;
+  cudaMalloc((void**)&data2, isize[0]*isize[1]*isize[2]*sizeof(double));
+
   i_time-=MPI_Wtime();
-  accfft_execute_c2r(plan,data_hat,data2);
+  accfft_execute_c2r_gpu(plan,data_hat,data2);
   i_time+=MPI_Wtime();
 
   /* optional : save output data */
+
+  // download data to CPU
+  cudaMemcpy(data_cpu, data2, 
+	     isize[0]*isize[1]*isize[2]*sizeof(double), 
+	     cudaMemcpyDeviceToHost);
+
 #ifdef USE_PNETCDF
   {
     std::string filename = "data_out.nc";
@@ -389,7 +406,7 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
 		  istart_mpi,
 		  isize_mpi,
 		  n,
-		  data2);
+		  data_cpu);
   }
 #else
   {
@@ -398,7 +415,7 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
     mpiRankString.fill('0');
     mpiRankString << procid ;
     std::string filename = "data_out_" + mpiRankString.str() + ".npz";
-    save_cnpy(data2, n, isize, istart, filename.c_str() );
+    save_cnpy(data_cpu, n, isize, istart, filename.c_str() );
   }
 #endif // USE_PNETCDF
 
@@ -501,11 +518,12 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
   PCOUT<<"FFT \t"<<g_f_time<<std::endl;
   PCOUT<<"IFFT \t"<<g_i_time<<std::endl;
 
-  accfft_free(data);
-  accfft_free(data_hat);
-  accfft_free(data2);
-  accfft_destroy_plan(plan);
-  accfft_cleanup();
+  free(data_cpu);
+  cudaFree(data);
+  cudaFree(data_hat);
+  cudaFree(data2);
+  accfft_destroy_plan_gpu(plan);
+  accfft_cleanup_gpu();
   MPI_Comm_free(&c_comm);
 
   return;
