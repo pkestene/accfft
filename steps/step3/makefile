@@ -20,12 +20,12 @@ INCDIR= -I$(FFTW_INC) -I$(ACCFFT_DIR)/include/
 
 
 
-all: step2
+all: step3
 
-step2.o:	step2.cpp
+step3.o:	step3.cpp
 	$(MPICXX) $(CXXFLAGS) -c $^ -o $@  $(INCDIR)
 
-step2:	step2.o
+step3:	step3.o
 	$(MPICXX) $(CXXFLAGS) $^  -o $@ $(LDFLAGS)
 
 
@@ -38,16 +38,16 @@ N_FLAGS += -I../../include
 # To be used for compiling gpu *.cpp files
 N_CXXFLAGS= -O3 -lcudart -lcufft -fopenmp -lfftw3 -lfftw3_threads -DENABLE_GPU
 N_CXXINC= -I$(CUDA_INC) -I$(FFTW_INC) -I$(ACCFFT_DIR)/include
-N_CXXLIB= -L$(CUDA_LIB) -L$(FFTW_LIB) -L$(ACCFFT_DIR)/lib -laccfft_gpu
+N_CXXLIB= -L$(CUDA_LIB) -L$(FFTW_LIB) -L$(ACCFFT_DIR)/lib -laccfft_gpu -lfftw3
 
-step2_gpu.o: step2_gpu.cpp
+step3_gpu.o: step3_gpu.cpp
 	$(MPICXX) $(N_CXXFLAGS) -c $^ $(N_CXXINC) -o $@  
 
-step2_gpu:	step2_gpu.o kernels.o
+step3_gpu:	step3_gpu.o kernels.o
 	$(MPICXX) $(N_CXXFLAGS) $^ $(N_CXXLIB) -o $@ 
 
 kernels.o:	kernels.cu
 	nvcc $^ -o $@ $(N_LIB) $(N_FLAGS)
 
 clean:
-	-rm -f *~ *.o step2 step2_gpu
+	-rm -f *~ *.o step3 step3_gpu
