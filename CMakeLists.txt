@@ -124,6 +124,7 @@ endif(BUILD_GPU)
 if(BUILD_STEPS)
 add_subdirectory(steps/step1)
 add_subdirectory(steps/poisson3d)
+add_subdirectory(steps/fBm)
 endif(BUILD_STEPS)
 
 add_subdirectory(test)
