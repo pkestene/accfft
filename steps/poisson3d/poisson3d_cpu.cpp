@@ -156,7 +156,8 @@ void initialize(double *a, int *n, MPI_Comm c_comm, GetPot &params)
  */
 void poisson_fourier_filter(Complex *data_hat, 
 			    int N[3],
-			    int isize[3], int istart[3],
+			    int isize[3], 
+			    int istart[3],
 			    int methodNb) {
 
   double NX = N[0];
@@ -230,7 +231,7 @@ void poisson_fourier_filter(Complex *data_hat,
   }
 
 
-} // fourier_filter
+} // poisson_fourier_filter
 
 // =======================================================
 // =======================================================
