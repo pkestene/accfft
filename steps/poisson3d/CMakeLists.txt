@@ -42,7 +42,7 @@ endif()
 #
 if(BUILD_GPU)
   set(poisson3d_gpu_SRCS
-    poisson3d_gpu.cpp
+    poisson3d_gpu.cpp kernels.cu
     )
   
   if (PNETCDF_FOUND)
@@ -50,7 +50,7 @@ if(BUILD_GPU)
     include_directories(${PNETCDF_INCLUDES})
   endif()
 
-  add_executable(poisson3d_gpu ${poisson3d_gpu_SRCS})
+  cuda_add_executable(poisson3d_gpu ${poisson3d_gpu_SRCS})
   set_target_properties(poisson3d_gpu PROPERTIES COMPILE_FLAGS "-DENABLE_GPU")
   target_link_libraries(poisson3d_gpu
     accfft_gpu

@@ -49,6 +49,12 @@ enum TESTCASE {
   TESTCASE_UNIFORM_BALL=2
 };
 
+// defined in kernels.cu
+void poisson_fourier_filter_gpu(Complex *data_hat, 
+				int N[3],
+				int isize[3],
+				int istart[3],
+				int methodNb);
 
 // =======================================================
 // =======================================================
@@ -232,7 +238,7 @@ void poisson_fourier_filter(Complex *data_hat,
   }
 
 
-} // fourier_filter
+} // poisson_fourier_filter
 
 // =======================================================
 // =======================================================
@@ -242,7 +248,8 @@ void poisson_fourier_filter(Complex *data_hat,
  */
 void save_cnpy(double *data, 
 	       int N[3],
-	       int isize[3], int istart[3],
+	       int isize[3], 
+	       int istart[3],
 	       const char * filename) {
 
   int NX = N[0];
@@ -378,7 +385,7 @@ void poisson_solve(int *n, TESTCASE testCaseNb, int nthreads, GetPot &params) {
   /* 
    * here perform fourier filter associated to poisson ...
    */
-  //poisson_fourier_filter(data_hat, n, plan->osize_2, plan->ostart_2, methodNb);
+  poisson_fourier_filter_gpu(data_hat, n, plan->osize_2, plan->ostart_2, methodNb);
 
   /* 
    * Perform backward FFT : data -> data2
