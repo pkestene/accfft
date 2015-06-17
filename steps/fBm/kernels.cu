@@ -24,7 +24,9 @@ __global__
 void setup_random_generator_kernel(curandState *state1, 
 				   curandState *state2, 
 				   dim3 N,
-				   dim3 isize)
+				   dim3 isize,
+				   unsigned long long seed1,
+				   unsigned long long seed2)
 {
   int k = blockDim.x * blockIdx.x + threadIdx.x;
   int j = blockDim.y * blockIdx.y + threadIdx.y;
@@ -34,8 +36,8 @@ void setup_random_generator_kernel(curandState *state1,
   /* Each thread gets same seed, a different sequence 
      number, no offset */
   if (k < isize.z and j < isize.y) {
-    curand_init(1234, id, 0, &state1[id]);
-    curand_init(1234, id, 0, &state2[id]);
+    curand_init(seed1, id, 0, &state1[id]);
+    curand_init(seed2, id, 0, &state2[id]);
   }
 
 } // setup_random_generator_kernel
@@ -141,7 +143,8 @@ void fBm_fourier_spectrum_gpu(Complex *data_hat,
 			      int N[3],
 			      int isize[3],
 			      int istart[3],
-			      double h) 
+			      double h,
+			      unsigned long long seeds[2]) 
 {
 
   dim3 NN     (N[0]     , N[1]     , N[2]);
@@ -166,7 +169,9 @@ void fBm_fourier_spectrum_gpu(Complex *data_hat,
   setup_random_generator_kernel<<<DimGrid, DimBlock>>>(devStates1,
 						       devStates2,
 						       NN,
-						       iisize);
+						       iisize,
+						       seeds[0],
+						       seeds[1]);
 
   // compute fBm
   fBm_fourier_spectrum_kernel<<<DimGrid, DimBlock>>>(data_hat,

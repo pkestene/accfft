@@ -43,7 +43,8 @@ void fBm_fourier_spectrum_gpu(Complex *data_hat,
 			      int N[3],
 			      int isize[3], 
 			      int istart[3],
-			      double h);
+			      double h,
+			      unsigned long long seeds[2]);
 
 // =======================================================
 // =======================================================
@@ -188,7 +189,10 @@ void generate_fBm(int *n, int nthreads, GetPot &params)
    * compute Fourier spectrum of a fBm
    */
   double h = params.follow(0.5,    "--h");
-  fBm_fourier_spectrum_gpu(data_hat, n, osize, ostart, h);
+  unsigned long long seeds[2];
+  seeds[0] = (unsigned long long) params.follow(1234,    "--s1");
+  seeds[1] = (unsigned long long) params.follow(8268,    "--s2");
+  fBm_fourier_spectrum_gpu(data_hat, n, osize, ostart, h, seeds);
 
 
   /* Perform backward FFT */
