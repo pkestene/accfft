@@ -23,14 +23,14 @@ typedef double Complex[2];
  */
 __global__ 
 void poisson_fourier_filter_kernel(Complex *data_hat, 
-				   int N[3],      // global sizes
-				   int isize[3],  // local  sizes
-				   int istart[3],
+				   dim3 N,      // global sizes
+				   dim3 isize,  // local  sizes
+				   dim3 istart,
 				   int methodNb) 
 {
-  double NX = N[0];
-  double NY = N[1];
-  double NZ = N[2];
+  double NX = N.x;
+  double NY = N.y;
+  double NZ = N.z;
   
   double Lx = 1.0;
   double Ly = 1.0;
@@ -47,10 +47,10 @@ void poisson_fourier_filter_kernel(Complex *data_hat,
   unsigned int j = blockDim.y * blockIdx.y + threadIdx.y;
   //unsigned int i = blockDim.z * blockIdx.z + threadIdx.z;
 
-  if (k < isize[2] and j < isize[1]) {
+  if (k < isize.z and j < isize.y) {
 
-    double ky = istart[1]+j;
-    double kz = istart[2]+k;
+    double ky = istart.y+j;
+    double kz = istart.z+k;
 
     double kky = (double) ky;
     double kkz = (double) kz;
@@ -60,11 +60,11 @@ void poisson_fourier_filter_kernel(Complex *data_hat,
     if (kz>NZ/2)
       kkz -= NZ;
     
-    for (int i=0, index=j*isize[2]+k; 
-	 i < isize[0]; 
-	 i++, index += isize[1]*isize[2]) {
+    for (int i=0, index=j*isize.z+k; 
+	 i < isize.x; 
+	 i++, index += isize.y*isize.z) {
       
-      double kx = istart[0]+i;  
+      double kx = istart.x+i;  
       double kkx = (double) kx;
       
       if (kx>NX/2)
@@ -124,6 +124,10 @@ void poisson_fourier_filter_gpu(Complex *data_hat,
 				int methodNb) 
 {
 
+  dim3 NN     (N[0]     , N[1]     , N[2]);
+  dim3 iisize (isize[0] , isize[1] , isize[2]);
+  dim3 iistart(istart[0], istart[1], istart[2]);
+
   // take care of direction order reversed :
   // CUDA X dir maps isize[2]
   // CUDA Y dir maps isize[1]
@@ -134,9 +138,9 @@ void poisson_fourier_filter_gpu(Complex *data_hat,
   dim3 DimGrid(blocksInX, blocksInY, 1);
   dim3 DimBlock(POISSON_FILTER_DIMX, POISSON_FILTER_DIMY, 1);
   poisson_fourier_filter_kernel<<<DimGrid, DimBlock>>>(data_hat,
-						       N,
-						       isize,
-						       istart,
+						       NN,
+						       iisize,
+						       iistart,
 						       methodNb);
 
 } // poisson_fourier_filter_gpu
