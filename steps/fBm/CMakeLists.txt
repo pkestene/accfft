@@ -5,8 +5,9 @@ if (PNETCDF_FOUND)
 endif()
 
 if(UNIX)
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=gnu++11")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11")
 endif()
+SET(CUDA_PROPAGATE_HOST_FLAGS OFF)
 
 # include dirs
 #include_directories(${MPI_INCLUDE_PATH})
@@ -38,17 +39,31 @@ endif()
 #
 # GPU executable
 #
-# if(BUILD_GPU)
-#   # source files list
-#   set(fBm_gpu_SRCS
-#     fBm_gpu.cpp
-#   )
-#   add_executable(fBm_gpu ${fBm_gpu_SRCS})
-#   set_target_properties(fBm_gpu PROPERTIES COMPILE_FLAGS "-DENABLE_GPU")
-#   target_link_libraries(fBm_gpu
-#     accfft_gpu
-#     ${FFTW_LIBRARIES}
-#     ${CUDA_LIBRARIES}
-#   )
-#   cuda_add_cufft_to_target(fBm_gpu)
-# endif(BUILD_GPU)
+if(BUILD_GPU)
+
+  #set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-g;-G)
+
+  # source files list
+  set(fBm_gpu_SRCS
+    fBm_gpu.cpp kernels.cu
+    )
+
+  if (PNETCDF_FOUND)
+    set (fBm_gpu_SRCS ${fBm_gpu_SRCS} pnetcdf/pnetcdf_io.cpp)
+    include_directories(${PNETCDF_INCLUDES})
+  endif()
+
+  cuda_add_executable(fBm_gpu ${fBm_gpu_SRCS})
+  set_target_properties(fBm_gpu PROPERTIES COMPILE_FLAGS "-DENABLE_GPU")
+  target_link_libraries(fBm_gpu
+    accfft_gpu
+    ${FFTW_LIBRARIES}
+    ${CUDA_LIBRARIES}
+  )
+
+  if (PNETCDF_FOUND)
+    target_link_libraries(fBm_gpu ${PNETCDF_LIBRARIES} ${CUDA_curand_LIBRARY})
+  endif()
+
+  cuda_add_cufft_to_target(fBm_gpu)
+endif(BUILD_GPU)
