@@ -56,16 +56,16 @@ void write_pnetcdf(const std::string &filename,
     ncCreationMode = NC_CLOBBER|NC_64BIT_OFFSET;
 
   // verbose log ?
-  bool pnetcdf_verbose = false;
+  //bool pnetcdf_verbose = false;
   
   int nbVar=1;
   int dimIds[3], varIds[nbVar];
-  MPI_Offset write_size, sum_write_size;
+  //MPI_Offset write_size, sum_write_size;
   MPI_Info mpi_info_used;
-  char str[512];
+  //char str[512];
   
   // time measurement variables
-  double write_timing, max_write_timing, write_bw;
+  //double write_timing, max_write_timing, write_bw;
 
   /* 
    * Create NetCDF file

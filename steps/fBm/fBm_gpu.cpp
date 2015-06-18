@@ -80,10 +80,6 @@ void fBm_fourier_spectrum(Complex *data_hat,
   double NY = N[1];
   double NZ = N[2];
   
-  double Lx = 1.0;
-  double Ly = 1.0;
-  double Lz = 1.0;
-
   for (int i=0; i < isize[0]; i++) {
     for (int j=0; j < isize[1]; j++) {
       for (int k=0; k < isize[2]; k++) { 
@@ -154,7 +150,7 @@ void generate_fBm(int *n, int nthreads, GetPot &params)
 
   double *data, *data_cpu;
   Complex *data_hat;
-  double f_time=0*MPI_Wtime(),i_time=0, setup_time=0;
+  double i_time=0, setup_time=0;
   int alloc_max=0;
 
   int isize[3],osize[3],istart[3],ostart[3];
@@ -220,7 +216,7 @@ void generate_fBm(int *n, int nthreads, GetPot &params)
 #endif // USE_PNETCDF
 
   /* Compute some timings statistics */
-  double g_f_time, g_i_time, g_setup_time;
+  double g_i_time, g_setup_time;
   MPI_Reduce(&i_time,&g_i_time,1, MPI_DOUBLE, MPI_MAX,0, MPI_COMM_WORLD);
   MPI_Reduce(&setup_time,&g_setup_time,1, MPI_DOUBLE, MPI_MAX,0, MPI_COMM_WORLD);
 
