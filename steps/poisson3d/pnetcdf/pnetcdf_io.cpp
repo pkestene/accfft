@@ -2,10 +2,10 @@
 #include <pnetcdf.h>
 #include <cstdlib>
 
-#define PNETCDF_HANDLE_ERROR {                        \
-    if (err != NC_NOERR)                              \
-        printf("Error at line %d (%s)\n", __LINE__,   \
-               ncmpi_strerror(err));                  \
+#define PNETCDF_HANDLE_ERROR {				      \
+    if (err != NC_NOERR)				      \
+      printf("PNetCDF Error at line %d (%s)\n", __LINE__,     \
+	     ncmpi_strerror(err));			      \
 }
 
 enum ComponentIndex3D {
@@ -126,7 +126,26 @@ void write_pnetcdf(const std::string &filename,
   int nItems = counts[IX]*counts[IY]*counts[IZ];
 
   {
+
+    // debug
+    // printf("Pnetcdf [rank=%d] starts=%lld %lld %lld, counts =%lld %lld %lld, gsizes=%d %d %d\n",
+    // 	   myRank,
+    // 	   starts[0],starts[1],starts[2],
+    // 	   counts[0],counts[1],counts[2],
+    // 	   gsizes[0],gsizes[1],gsizes[2]);
     
+    /* 
+     * make sure PNetCDF doesn't complain when starts is outside of global domain
+     * bound. When nItems is null, off course we don't write anything, but starts
+     * offset have to be inside global domain.
+     * So there is no harm, setting starts to origin.
+     */
+    if (nItems == 0) {
+      starts[0]=0;
+      starts[1]=0;
+      starts[2]=0;
+    }
+
     err = ncmpi_put_vara_all(ncFileId, 
 			     varIds[0], 
 			     starts, 
