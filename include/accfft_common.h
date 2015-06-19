@@ -16,7 +16,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with AccFFT.  If not, see <http://www.gnu.org/licenses/>.
  *
-*/
+ */
 
 #ifndef ACCFFT_COMMON_H
 #define ACCFFT_COMMON_H

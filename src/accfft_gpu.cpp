@@ -30,7 +30,9 @@
 #include <cuda.h>
 #include <cufft.h>
 #include "accfft_common.h"
-#define VERBOSE 0
+#ifndef VERBOSE
+# define VERBOSE 0
+#endif // VERBOSE
 #define PCOUT if(procid==0) std::cout
 typedef double Complex[2];
 
