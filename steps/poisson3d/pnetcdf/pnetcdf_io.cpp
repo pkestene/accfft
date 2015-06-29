@@ -14,6 +14,115 @@ enum ComponentIndex3D {
   IZ = 2
 };
 
+/**
+ * Read a parallel-nedcdf file.
+ *
+ * We assume here that localData is a scalar.
+ *
+ * Pnetcdf uses row-major format (same as FFTW).
+ *
+ * \param[in]  filename  : PnetCDF filename
+ * \param[in]  starts    : offset to where to start reading data
+ * \param[in]  counts    : number of elements read (3D sub-domain inside global)
+ * \param[in]  gsizes    : global sizes
+ * \param[out] localData : actual data buffer (size : nx*ny*nz*sizeof(double))
+ *
+ * localData must have been allocated prior to calling this routine.
+ */
+void read_pnetcdf(const std::string &filename,
+		  MPI_Offset         starts[3],
+		  MPI_Offset         counts[3],
+		  int                gsizes[3],
+		  double            *localData)
+{
+
+  int myRank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
+
+  // netcdf file id
+  int ncFileId;
+  int err;
+
+  // file opening mode
+  int ncOpenMode = NC_NOWRITE;
+
+  int nbVar=1;
+  int varIds[nbVar];
+  MPI_Info mpi_info_used;
+  
+  /* 
+   * Open NetCDF file
+   */
+  err = ncmpi_open(MPI_COMM_WORLD, filename.c_str(), 
+		   ncOpenMode,
+		   MPI_INFO_NULL, &ncFileId);
+  if (err != NC_NOERR) {
+    printf("Error: ncmpi_open() file %s (%s)\n",filename.c_str(),ncmpi_strerror(err));
+    MPI_Abort(MPI_COMM_WORLD, -1);
+    exit(1);
+  }
+
+  /*
+   * Query NetCDF mode
+   */
+  int NC_mode;
+  err = ncmpi_inq_version(ncFileId, &NC_mode);
+  if (myRank==0) {
+    if (NC_mode == NC_64BIT_DATA)
+      std::cout << "Pnetcdf Input mode : NC_64BIT_DATA (CDF-5)\n";
+    else if (NC_mode == NC_64BIT_OFFSET)
+      std::cout << "Pnetcdf Input mode : NC_64BIT_OFFSET (CDF-2)\n";
+    else
+      std::cout << "Pnetcdf Input mode : unknown\n";
+  }
+
+  /*
+   * Query information about variable named "data"
+   */
+  {
+    int ndims, nvars, ngatts, unlimited;
+    err = ncmpi_inq(ncFileId, &ndims, &nvars, &ngatts, &unlimited);
+    PNETCDF_HANDLE_ERROR;
+
+    err = ncmpi_inq_varid(ncFileId, "data", &varIds[0]);
+    PNETCDF_HANDLE_ERROR;
+  }
+
+  /* 
+   * Define expected data types (no conversion done here)
+   */
+  MPI_Datatype mpiDataType = MPI_DOUBLE;
+
+  /* 
+   * Get all the MPI_IO hints used (just in case, we want to print it after 
+   * reading data...
+   */
+  err = ncmpi_get_file_info(ncFileId, &mpi_info_used);
+  PNETCDF_HANDLE_ERROR;
+
+  /*
+   * Read heavy data (take care of row-major / column major format !)
+   */
+  int nItems = counts[IX]*counts[IY]*counts[IZ];
+  {
+    
+    err = ncmpi_get_vara_all(ncFileId,
+			     varIds[0], 
+			     starts,
+			     counts,
+			     localData,
+			     nItems,
+			     mpiDataType);
+    PNETCDF_HANDLE_ERROR;
+  } // end reading heavy data
+
+  /* 
+   * close the file 
+   */
+  err = ncmpi_close(ncFileId);
+  PNETCDF_HANDLE_ERROR;
+
+} // read_pnetcdf
 
 /**
  * Write a parallel-nedcdf file.
@@ -26,8 +135,6 @@ enum ComponentIndex3D {
  * \param[in]  starts    : offset to where to start reading data
  * \param[in]  counts    : number of elements read (3D sub-domain inside global)
  * \param[in]  gsizes    : global sizes
- * \param[in]  mpiCoord  : coordinate of current MPI proc cartesian topolgy
- * \param[in]  mpiGrid   : cartesian topo sizes
  * \param[in]  localData : actual data buffer (size : nx*ny*nz*sizeof(double))
  *
  */
