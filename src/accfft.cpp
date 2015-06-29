@@ -30,7 +30,7 @@
 #include "accfft_common.h"
 #ifndef VERBOSE
 # define VERBOSE 0
-#endif
+#endif // VERBOSE
 #define PCOUT if(procid==0) std::cout
 typedef double Complex[2];
 
@@ -56,6 +56,8 @@ void accfft_cleanup(){
  * \param[out] isize local size array of input data (before FFT)
  * \param[out] istart offset where local data starts in global domain
  * \param[in]  c_comm MPI communicateur
+ *
+ * \return alloc_local number of bytes to allocate
  */
 int dfft_get_local_size(int N0, int N1, int N2,
 			int * isize, int * istart,
@@ -68,7 +70,9 @@ int dfft_get_local_size(int N0, int N1, int N2,
   int coords[2],np[2],periods[2];
   MPI_Cart_get(c_comm,2,np,periods,coords);
 
-  if (0) {
+  int alloc_local=0;
+
+  if (1) {
     isize[0]=ceil(N0/(double)np[0]);
     isize[1]=ceil(N1/(double)np[1]);
     isize[2]=N2;
@@ -89,9 +93,10 @@ int dfft_get_local_size(int N0, int N1, int N2,
       isize[1]*=(int) isize[1]>0;
       istart[1]=N1-isize[1];
     }
-  }
 
-  if (1) {
+    alloc_local=isize[0]*isize[1]*isize[2]*sizeof(double);
+
+  } else {
 
     // adjust sizes when N0 (resp. N1) is not a multiple of np[0] (resp. np[1])
     // compute the quotient / remainder of integer division
@@ -110,6 +115,11 @@ int dfft_get_local_size(int N0, int N1, int N2,
     istart[1] = coords[1] < r[1] ? (q[1]+1)*coords[1] : (q[1]+1)*r[1] + q[1]*(coords[1]-r[1]);
     istart[2] = 0;
 
+    // need to take into account that all MPI processes don't have necessarily
+    // a sub-domain of equal size
+    // so we use the largest one here
+    alloc_local=(q[0]+1)*(q[1]+1)*isize[2]*sizeof(double);
+
   }
 
 
@@ -119,12 +129,11 @@ int dfft_get_local_size(int N0, int N1, int N2,
       for(int c=0;c<np[1];c++){
         MPI_Barrier(c_comm);
         if((coords[0]==r) && (coords[1]==c))
-          std::cout<<coords[0]<<","<<coords[1]<<" isize[0]= "<<isize[0]<<" isize[1]= "<<isize[1]<<" isize[2]= "<<isize[2]<<" istart[0]= "<<istart[0]<<" istart[1]= "<<istart[1]<<" istart[2]= "<<istart[2]<<std::endl;
+          std::cout<<"[rank="<<procid<<"]"<<coords[0]<<","<<coords[1]<<" isize[0]= "<<isize[0]<<" isize[1]= "<<isize[1]<<" isize[2]= "<<isize[2]<<" istart[0]= "<<istart[0]<<" istart[1]= "<<istart[1]<<" istart[2]= "<<istart[2]<<std::endl;
         MPI_Barrier(c_comm);
       }
     MPI_Barrier(c_comm);
   }
-  int alloc_local=isize[0]*isize[1]*isize[2]*sizeof(double);
 
 
   return alloc_local;
