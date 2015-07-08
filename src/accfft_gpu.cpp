@@ -1,3 +1,7 @@
+/**
+ * @file
+ * GPU functions of AccFFT
+ */
 /*
  *  Copyright (c) 2014-2015, Amir Gholami, George Biros
  *  All rights reserved.
@@ -36,6 +40,9 @@
 #define PCOUT if(procid==0) std::cout
 typedef double Complex[2];
 
+/**
+ * Cleanup all CPU resources
+ */
 void accfft_cleanup_gpu(){
   // empty for now
 }
@@ -75,6 +82,18 @@ int dfft_get_local_size_gpu(int N0, int N1, int N2, int * isize, int * istart,MP
   return alloc_local;
 }
 
+/**
+ * Get the local sizes of the distributed global data for a GPU R2C transform
+ * @param n Integer array of size 3, corresponding to the global data size
+ * @param isize The size of the data that is locally distributed to the calling process
+ * @param istart The starting index of the data that locally resides on the calling process
+ * @param osize The output size of the data that locally resides on the calling process,
+ * after the R2C transform is finished
+ * @param ostart The output starting index of the data that locally resides on the calling process,
+ * after the R2C transform is finished
+ * @param c_comm Cartesian communicator returned by \ref accfft_create_comm
+ * @return
+ */
 int accfft_local_size_dft_r2c_gpu( int * n,int * isize, int * istart, int * osize, int *ostart,MPI_Comm c_comm, bool inplace){
 
   //1D & 2D Decomp
@@ -118,6 +137,17 @@ int accfft_local_size_dft_r2c_gpu( int * n,int * isize, int * istart, int * osiz
 
 }
 
+
+/**
+ * Creates a 3D R2C parallel FFT plan.If data_out point to the same location as the input
+ * data, then an inplace plan will be created. Otherwise the plan would be outplace.
+ * @param n Integer array of size 3, corresponding to the global data size
+ * @param data Input data in spatial domain
+ * @param data_out Output data in frequency domain
+ * @param c_comm Cartesian communicator returned by \ref accfft_create_comm
+ * @param flags AccFFT flags, See \ref flags for more details.
+ * @return
+ */
 accfft_plan_gpu*  accfft_plan_dft_3d_r2c_gpu(int * n, double * data_d, double * data_out_d, MPI_Comm c_comm,unsigned flags){
   accfft_plan_gpu *plan=new accfft_plan_gpu;
   int procid;
@@ -214,25 +244,35 @@ accfft_plan_gpu*  accfft_plan_dft_3d_r2c_gpu(int * n, double * data_d, double * 
     }
 
 
-    static int method_static=0;
-    static int kway_static_2=0;
-    if(method_static==0){
+    /*
+       static int method_static=0;
+       static int kway_static_2=0;
+       if(method_static==0){
+       plan->T_plan_1->which_fast_method_gpu(plan->T_plan_1,data_out_d);
+       method_static=plan->T_plan_1->method;
+       kway_static_2=plan->T_plan_1->kway;//-4;
+       }
+       else{
+       plan->T_plan_1->method=method_static;
+       plan->T_plan_1->kway=kway_static_2;
+       }
+       */
+
+    if(flags==ACCFFT_MEASURE){
       plan->T_plan_1->which_fast_method_gpu(plan->T_plan_1,data_out_d);
-      method_static=plan->T_plan_1->method;
-      kway_static_2=plan->T_plan_1->kway;//-4;
     }
     else{
-      plan->T_plan_1->method=method_static;
-      plan->T_plan_1->kway=kway_static_2;
+      plan->T_plan_1->method=2;
+      plan->T_plan_1->kway=2;
     }
-
     checkCuda_accfft (cudaDeviceSynchronize());
     MPI_Barrier(plan->c_comm);
 
-    plan->T_plan_1->method=plan->T_plan_1->method;
-    plan->T_plan_1->kway=kway_static_2;
+    plan->T_plan_1->method =plan->T_plan_1->method;
     plan->T_plan_1i->method=plan->T_plan_1->method;
-    plan->T_plan_1i->kway=kway_static_2;
+
+    plan->T_plan_1->kway =plan->T_plan_1->kway;
+    plan->T_plan_1i->kway=plan->T_plan_1->kway;
 
     // Make unused parts of plan NULL
     plan->T_plan_2=NULL;
@@ -379,6 +419,7 @@ accfft_plan_gpu*  accfft_plan_dft_3d_r2c_gpu(int * n, double * data_d, double * 
 
 
 
+    /*
     static int method_static_2=0;
     static int kway_static_2=0;
     if(method_static_2==0){
@@ -391,16 +432,31 @@ accfft_plan_gpu*  accfft_plan_dft_3d_r2c_gpu(int * n, double * data_d, double * 
       MPI_Bcast(&kway_static_2,1, MPI_INT,0, c_comm );
       MPI_Barrier(c_comm);
     }
+    */
+
+    if(flags==ACCFFT_MEASURE){
+      if(coord[0]==0){
+        plan->T_plan_1->which_fast_method_gpu(plan->T_plan_1,data_out_d);
+      }
+    }
+    else{
+        plan->T_plan_1->method=2;
+        plan->T_plan_1->kway=2;
+    }
+
+    MPI_Bcast(&plan->T_plan_1->method,1, MPI_INT,0, c_comm );
+    MPI_Bcast(&plan->T_plan_1->kway,1, MPI_INT,0, c_comm );
+
     checkCuda_accfft (cudaDeviceSynchronize());
     MPI_Barrier(plan->c_comm);
-    plan->T_plan_1->method=method_static_2;
-    plan->T_plan_2->method=method_static_2;
-    plan->T_plan_2i->method=method_static_2;
-    plan->T_plan_1i->method=method_static_2;
-    plan->T_plan_1->kway=kway_static_2;
-    plan->T_plan_2->kway=kway_static_2;
-    plan->T_plan_2i->kway=kway_static_2;
-    plan->T_plan_1i->kway=kway_static_2;
+    plan->T_plan_1->method =plan->T_plan_1->method;
+    plan->T_plan_2->method =plan->T_plan_1->method;
+    plan->T_plan_2i->method=plan->T_plan_1->method;
+    plan->T_plan_1i->method=plan->T_plan_1->method;
+    plan->T_plan_1->kway =plan->T_plan_1->kway;
+    plan->T_plan_2->kway =plan->T_plan_1->kway;
+    plan->T_plan_2i->kway=plan->T_plan_1->kway;
+    plan->T_plan_1i->kway=plan->T_plan_1->kway;
 
     plan->iplan_1=-1;
     plan->iplan_2=-1;
@@ -409,6 +465,7 @@ accfft_plan_gpu*  accfft_plan_dft_3d_r2c_gpu(int * n, double * data_d, double * 
   return plan;
 
 }
+
 
 void accfft_execute_gpu(accfft_plan_gpu* plan, int direction,double * data_d, double * data_out_d, double * timer){
 
@@ -588,17 +645,52 @@ void accfft_execute_gpu(accfft_plan_gpu* plan, int direction,double * data_d, do
 
   return;
 }
+
+
+/**
+ * Execute R2C plan. This function is blocking and only returns after the transform is completed.
+ * @note For inplace transforms, data_out should point to the same memory address as data, AND
+ * the plan must have been created as inplace.
+ * @param plan FFT plan created by \ref accfft_plan_dft_3d_r2c.
+ * @param data Input data in spatial domain.
+ * @param data_out Output data in frequency domain.
+ * @param timer See \ref timer for more details.
+ */
 void accfft_execute_r2c_gpu(accfft_plan_gpu* plan, double * data,Complex * data_out, double * timer){
   accfft_execute_gpu(plan,-1,data,(double*)data_out,timer);
 
   return;
 }
+
+
+/**
+ * Execute C2R plan. This function is blocking and only returns after the transform is completed.
+ * @note For inplace transforms, data_out should point to the same memory address as data, AND
+ * the plan must have been created as inplace.
+ * @param plan FFT plan created by \ref accfft_plan_dft_3d_r2c.
+ * @param data Input data in frequency domain.
+ * @param data_out Output data in frequency domain.
+ * @param timer See \ref timer for more details.
+ */
 void accfft_execute_c2r_gpu(accfft_plan_gpu* plan, Complex * data,double * data_out, double * timer){
   accfft_execute_gpu(plan,1,(double*)data,data_out,timer);
 
   return;
 }
 
+
+/**
+ * Get the local sizes of the distributed global data for a GPU C2C transform
+ * @param n Integer array of size 3, corresponding to the global data size
+ * @param isize The size of the data that is locally distributed to the calling process
+ * @param istart The starting index of the data that locally resides on the calling process
+ * @param osize The output size of the data that locally resides on the calling process,
+ * after the C2C transform is finished
+ * @param ostart The output starting index of the data that locally resides on the calling process,
+ * after the R2C transform is finished
+ * @param c_comm Cartesian communicator returned by \ref accfft_create_comm
+ * @return
+ */
 int accfft_local_size_dft_c2c_gpu( int * n,int * isize, int * istart, int * osize, int *ostart,MPI_Comm c_comm){
 
   int osize_0[3]={0}, ostart_0[3]={0};
@@ -642,6 +734,17 @@ int accfft_local_size_dft_c2c_gpu( int * n,int * isize, int * istart, int * osiz
 
 }
 
+
+/**
+ * Creates a 3D C2C parallel FFT plan. If data_out point to the same location as the input
+ * data, then an inplace plan will be created. Otherwise the plan would be outplace.
+ * @param n Integer array of size 3, corresponding to the global data size
+ * @param data Input data in spatial domain
+ * @param data_out Output data in frequency domain
+ * @param c_comm Cartesian communicator returned by \ref accfft_create_comm
+ * @param flags AccFFT flags, See \ref flags for more details.
+ * @return
+ */
 accfft_plan_gpu*  accfft_plan_dft_3d_c2c_gpu(int * n, Complex * data_d, Complex * data_out_d, MPI_Comm c_comm,unsigned flags){
   accfft_plan_gpu *plan=new accfft_plan_gpu;
   int nprocs, procid;
@@ -713,17 +816,23 @@ accfft_plan_gpu*  accfft_plan_dft_3d_c2c_gpu(int * n, Complex * data_d, Complex 
     int ostride2=local_n1*(NZ);
     MPI_Barrier(c_comm);
     if(local_n1*NZ!=0){
-    cufft_error=cufftPlanMany(&plan->fplan_1, 1, &n[0],
-        f_inembed2, istride2, idist2, // *inembed, istride, idist
-        f_onembed2, ostride2, odist2, // *onembed, ostride, odist
-        CUFFT_Z2Z, local_n1*(NZ));
-    if(cufft_error!= CUFFT_SUCCESS){
-      fprintf(stderr, "CUFFT error: fplan2 creation failed %d\n",cufft_error); return NULL;
-    }
-    //cufftSetCompatibilityMode(fplan2,CUFFT_COMPATIBILITY_FFTW_PADDING); if (cudaGetLastError() != cudaSuccess){fprintf(stderr, "Cuda error:Failed at fplan2 cuda compatibility\n"); return;}
+      cufft_error=cufftPlanMany(&plan->fplan_1, 1, &n[0],
+          f_inembed2, istride2, idist2, // *inembed, istride, idist
+          f_onembed2, ostride2, odist2, // *onembed, ostride, odist
+          CUFFT_Z2Z, local_n1*(NZ));
+      if(cufft_error!= CUFFT_SUCCESS){
+        fprintf(stderr, "CUFFT error: fplan2 creation failed %d\n",cufft_error); return NULL;
+      }
+      //cufftSetCompatibilityMode(fplan2,CUFFT_COMPATIBILITY_FFTW_PADDING); if (cudaGetLastError() != cudaSuccess){fprintf(stderr, "Cuda error:Failed at fplan2 cuda compatibility\n"); return;}
     }
 
-    plan->T_plan_1->which_fast_method_gpu(plan->T_plan_1,(double*)data_out_d);
+    if(flags==ACCFFT_MEASURE){
+      plan->T_plan_1->which_fast_method_gpu(plan->T_plan_1,(double*)data_out_d);
+    }
+    else{
+      plan->T_plan_1->method=2;
+      plan->T_plan_1->kway=2;
+    }
     plan->T_plan_1i->method=plan->T_plan_1->method;
     plan->T_plan_1i->kway=plan->T_plan_1->kway;
 
@@ -861,35 +970,48 @@ accfft_plan_gpu*  accfft_plan_dft_3d_c2c_gpu(int * n, Complex * data_d, Complex 
 
     int coords[2],np[2],periods[2];
     MPI_Cart_get(c_comm,2,np,periods,coords);
-    int transpose_method=0;
-    int kway_method=0;
-    if(coords[0]==0){
-      plan->T_plan_1->which_fast_method_gpu(plan->T_plan_1,(double*)data_out_d);
-      transpose_method=plan->T_plan_1->method;
-      kway_method=plan->T_plan_1->kway;
+
+    if(flags==ACCFFT_MEASURE){
+      if(coords[0]==0){
+        plan->T_plan_1->which_fast_method_gpu(plan->T_plan_1,(double*)data_out_d);
+      }
     }
+    else{
+      plan->T_plan_1->method=2;
+      plan->T_plan_1->kway=2;
+    }
+
+    MPI_Bcast(&plan->T_plan_1->method,1, MPI_INT,0, c_comm );
+    MPI_Bcast(&plan->T_plan_1->kway,1, MPI_INT,0, c_comm );
     checkCuda_accfft (cudaDeviceSynchronize());
     MPI_Barrier(plan->c_comm);
 
 
-    MPI_Bcast(&transpose_method,1, MPI_INT,0, c_comm);
-    MPI_Bcast(&kway_method,1, MPI_INT,0, c_comm);
-    MPI_Barrier(c_comm);
-    plan->T_plan_1->method=transpose_method;
-    plan->T_plan_2->method= transpose_method;
-    plan->T_plan_2i->method=transpose_method;
-    plan->T_plan_1i->method=transpose_method;
+    plan->T_plan_1->method =plan->T_plan_1->method;
+    plan->T_plan_2->method =plan->T_plan_1->method;
+    plan->T_plan_2i->method=plan->T_plan_1->method;
+    plan->T_plan_1i->method=plan->T_plan_1->method;
 
-    plan->T_plan_1->kway=kway_method;
-    plan->T_plan_2->kway= kway_method;
-    plan->T_plan_2i->kway=kway_method;
-    plan->T_plan_1i->kway=kway_method;
+    plan->T_plan_1->kway =plan->T_plan_1->kway;
+    plan->T_plan_2->kway =plan->T_plan_1->kway;
+    plan->T_plan_2i->kway=plan->T_plan_1->kway;
+    plan->T_plan_1i->kway=plan->T_plan_1->kway;
 
 
   }
   return plan;
 }
 
+
+/**
+ * Execute C2C plan. This function is blocking and only returns after the transform is completed.
+ * @note For inplace transforms, data_out should point to the same memory address as data, AND
+ * the plan must have been created as inplace.
+ * @param plan FFT plan created by \ref accfft_plan_dft_3d_r2c.
+ * @param data Input data in frequency domain.
+ * @param data_out Output data in frequency domain.
+ * @param timer See \ref timer for more details.
+ */
 void accfft_execute_c2c_gpu(accfft_plan_gpu* plan, int direction,Complex * data_d, Complex * data_out_d, double * timer){
 
   if(data_d==NULL)
@@ -1080,9 +1202,18 @@ void accfft_execute_c2c_gpu(accfft_plan_gpu* plan, int direction,Complex * data_
 }
 
 
+/**
+ * Destroy AccFFT CPU plan. This function calls \ref accfft_destroy_plan_gpu.
+ * @param plan Input plan to be destroyed.
+ */
 void accfft_destroy_plan(accfft_plan_gpu * plan){
   return (accfft_destroy_plan_gpu(plan));
 }
+
+/**
+ * Destroy AccFFT GPU plan.
+ * @param plan Input plan to be destroyed.
+ */
 void accfft_destroy_plan_gpu(accfft_plan_gpu * plan){
 
   if(plan->T_plan_1!=NULL)delete(plan->T_plan_1);

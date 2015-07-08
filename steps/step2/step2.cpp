@@ -74,7 +74,7 @@ void check_err(double* a,int*n,MPI_Comm c_comm){
   int istart[3], isize[3], osize[3],ostart[3];
   accfft_local_size_dft_r2c(n,isize,istart,osize,ostart,c_comm);
 
-  double err,norm;
+  double err=0,norm=0;
   {
     double X,Y,Z,numerical;
     long int ptr;
@@ -128,10 +128,15 @@ void step2(int *n, int nthreads) {
   data=(double*)accfft_alloc(alloc_max);
 
   accfft_init(nthreads);
+
   setup_time=-MPI_Wtime();
   /* Create FFT plan */
   accfft_plan * plan=accfft_plan_dft_3d_r2c(n,data,data,c_comm,ACCFFT_MEASURE); // note that in and out are both data -> inplace plan
   setup_time+=MPI_Wtime();
+
+  /* Warm Up */
+  accfft_execute_r2c(plan,data,(Complex*)data);
+  accfft_execute_r2c(plan,data,(Complex*)data);
 
   /*  Initialize data */
   initialize(data,n,c_comm); // special initialize plan for inplace transform -> difference in padding

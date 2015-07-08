@@ -44,14 +44,20 @@ void step1(int *n, int nthreads) {
   /* Get the local pencil size and the allocation size */
   alloc_max=accfft_local_size_dft_r2c(n,isize,istart,osize,ostart,c_comm);
 
-  data=(double*)accfft_alloc(isize[0]*isize[1]*isize[2]*sizeof(double));
+  //data=(double*)accfft_alloc(isize[0]*isize[1]*isize[2]*sizeof(double));
+  data=(double*)accfft_alloc(alloc_max);
   data_hat=(Complex*)accfft_alloc(alloc_max);
 
   accfft_init(nthreads);
-  setup_time=-MPI_Wtime();
+
   /* Create FFT plan */
+  setup_time=-MPI_Wtime();
   accfft_plan * plan=accfft_plan_dft_3d_r2c(n,data,(double*)data_hat,c_comm,ACCFFT_MEASURE);
   setup_time+=MPI_Wtime();
+
+  /* Warm Up */
+  accfft_execute_r2c(plan,data,data_hat);
+  accfft_execute_r2c(plan,data,data_hat);
 
   /*  Initialize data */
   initialize(data,n,c_comm);
@@ -76,7 +82,7 @@ void step1(int *n, int nthreads) {
   double norm=0,g_norm=0;
   for (int i=0;i<isize[0]*isize[1]*isize[2];++i){
     err+=data2[i]/n[0]/n[1]/n[2]-data[i];
-    norm+=data2[i]/n[0]/n[1]/n[2];
+    norm+=data[i]/n[0]/n[1]/n[2];
   }
   MPI_Reduce(&err,&g_err,1, MPI_DOUBLE, MPI_MAX,0, MPI_COMM_WORLD);
   MPI_Reduce(&norm,&g_norm,1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
@@ -174,7 +180,7 @@ void check_err(double* a,int*n,MPI_Comm c_comm){
   int istart[3], isize[3], osize[3],ostart[3];
   accfft_local_size_dft_r2c(n,isize,istart,osize,ostart,c_comm);
 
-  double err,norm;
+  double err=0,norm=0;
 
   double X,Y,Z,numerical_r;
   long int ptr;

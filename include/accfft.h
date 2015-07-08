@@ -51,7 +51,7 @@ struct accfft_plan{
   int periods[2]; /*!< for each dimension, is the grid periodic (1) or not(0)
 		   * set to zero in accfft_create_comm */
   
-  MPI_Comm c_comm,row_comm,col_comm; //!< Cartesian topolgy communicator and
+  MPI_Comm c_comm,row_comm,col_comm; //!< Cartesian topolgy communicators
 
   /*
    * logical size and start of local sub-domain, after each the 3 1D-FFT steps,
@@ -82,11 +82,11 @@ int dfft_get_local_size(int N0, int N1, int N2,
 int accfft_local_size_dft_r2c(int * n, 
 			      int * isize, int * istart, 
 			      int * osize, int * ostart,
-			      MPI_Comm c_comm, bool inplace=0);
+			      MPI_Comm c_comm);
 
 accfft_plan*  accfft_plan_dft_3d_r2c(int * n, 
 				     double * data, double * data_out,
-				     MPI_Comm c_comm, unsigned flags);
+				     MPI_Comm c_comm, unsigned flags=ACCFFT_MEASURE);
 
 int accfft_local_size_dft_c2c(int * n,
 			      int * isize, int * istart, 
@@ -95,7 +95,7 @@ int accfft_local_size_dft_c2c(int * n,
 
 accfft_plan*  accfft_plan_dft_3d_c2c(int * n,
 				     Complex * data, Complex * data_out,
-				     MPI_Comm c_comm, unsigned flags);
+				     MPI_Comm c_comm, unsigned flags=ACCFFT_MEASURE);
 
 void accfft_execute_r2c(accfft_plan* plan,
 			double * data=NULL, Complex * data_out=NULL,

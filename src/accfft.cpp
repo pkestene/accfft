@@ -1,4 +1,7 @@
-
+/**
+ * @file
+ * CPU functions of AccFFT
+ */
 /*
  *  Copyright (c) 2014-2015, Amir Gholami, George Biros
  *  All rights reserved.
@@ -34,14 +37,21 @@
 #define PCOUT if(procid==0) std::cout
 typedef double Complex[2];
 
-
+/**
+ * Initializes the library.
+ * @param nthreads The number of OpenMP threads to use for execution of local FFT.
+ * @return 0 if successful
+ */
 int accfft_init(int nthreads){
-  int threads_ok;
+  int threads_ok=1;
   if (threads_ok) threads_ok = fftw_init_threads();
   if (threads_ok) fftw_plan_with_nthreads(nthreads);
   return (!threads_ok);
 }
 
+/**
+ * Cleanup all CPU resources
+ */
 void accfft_cleanup(){
   fftw_cleanup_threads();
   fftw_cleanup();
@@ -123,13 +133,13 @@ int dfft_get_local_size(int N0, int N1, int N2,
   }
 
 
-  if(VERBOSE>=2){
+  if(VERBOSE>=0){
     MPI_Barrier(c_comm);
     for(int r=0;r<np[0];r++)
       for(int c=0;c<np[1];c++){
         MPI_Barrier(c_comm);
         if((coords[0]==r) && (coords[1]==c))
-          std::cout<<"[rank="<<procid<<"]"<<coords[0]<<","<<coords[1]<<" isize[0]= "<<isize[0]<<" isize[1]= "<<isize[1]<<" isize[2]= "<<isize[2]<<" istart[0]= "<<istart[0]<<" istart[1]= "<<istart[1]<<" istart[2]= "<<istart[2]<<std::endl;
+          std::cout<<"[rank="<<procid<<"]"<<coords[0]<<","<<coords[1]<<" isize[0]= "<<isize[0]<<" isize[1]= "<<isize[1]<<" isize[2]= "<<isize[2]<<" istart[0]= "<<istart[0]<<" istart[1]= "<<istart[1]<<" istart[2]= "<<istart[2]<<" alloc_local="<<alloc_local<<std::endl;
         MPI_Barrier(c_comm);
       }
     MPI_Barrier(c_comm);
@@ -154,7 +164,7 @@ int dfft_get_local_size(int N0, int N1, int N2,
 int accfft_local_size_dft_r2c(int * n, 
 			      int * isize, int * istart, 
 			      int * osize, int * ostart,
-			      MPI_Comm c_comm, bool inplace){
+			      MPI_Comm c_comm){
 
   //1D & 2D Decomp
   int osize_0[3]={0}, ostart_0[3]={0};
@@ -234,9 +244,14 @@ accfft_plan*  accfft_plan_dft_3d_r2c(int * n,
     plan->inplace=true;}
   else{plan->inplace=false;}
 
+  unsigned fftw_flags;
+  if(flags==ACCFFT_ESTIMATE)
+    fftw_flags=FFTW_ESTIMATE;
+  else
+    fftw_flags=FFTW_MEASURE;
+
   // 1D Decomposition
   if(plan->np[1]==1){
-    unsigned fftw_flags=FFTW_MEASURE;
     int N0=n[0], N1=n[1], N2=n[2];
 
     int n_tuples_o,n_tuples_i;
@@ -244,7 +259,7 @@ accfft_plan*  accfft_plan_dft_3d_r2c(int * n,
     n_tuples_o=(N2/2+1)*2;
 
     int isize[3],osize[3],istart[3],ostart[3];
-    int alloc_max=accfft_local_size_dft_r2c(n,isize,istart,osize,ostart,c_comm,plan->inplace);
+    int alloc_max=accfft_local_size_dft_r2c(n,isize,istart,osize,ostart,c_comm);
     plan->alloc_max=alloc_max;
 
     plan->Mem_mgr= new Mem_Mgr(N0,N1,n_tuples_o,c_comm);
@@ -289,6 +304,7 @@ accfft_plan*  accfft_plan_dft_3d_r2c(int * n,
         FFTW_BACKWARD,fftw_flags);
     if(plan->iplan_1==NULL) std::cout<<"!!! Inverse Plan2 not Created !!!"<<std::endl;
 
+    /*
     static int method_static=0;
     static int kway_static_2=0;
     if(method_static==0){
@@ -300,10 +316,16 @@ accfft_plan*  accfft_plan_dft_3d_r2c(int * n,
       plan->T_plan_1->method=method_static;
       plan->T_plan_1->kway=kway_static_2;
     }
-    plan->T_plan_1->method=plan->T_plan_1->method;
-      plan->T_plan_1->kway=kway_static_2;
+    */
+    if(flags==ACCFFT_MEASURE){
+      plan->T_plan_1->which_fast_method(plan->T_plan_1,data_out);
+    }
+    else{
+      plan->T_plan_1->method=2;
+      plan->T_plan_1->kway=2;
+    }
     plan->T_plan_1i->method=plan->T_plan_1->method;
-      plan->T_plan_1i->kway=kway_static_2;
+    plan->T_plan_1i->kway=plan->T_plan_1->kway;
     plan->data=data;
 
     // Make unused parts of plan NULL
@@ -330,7 +352,7 @@ accfft_plan*  accfft_plan_dft_3d_r2c(int * n,
     n_tuples_o=(n[2]/2+1)*2;
 
     int isize[3],osize[3],istart[3],ostart[3];
-    alloc_max=accfft_local_size_dft_r2c(n,isize,istart,osize,ostart,c_comm,plan->inplace);
+    alloc_max=accfft_local_size_dft_r2c(n,isize,istart,osize,ostart,c_comm);
 
     dfft_get_local_size(n[0],n[1],n_tuples_o,osize_0,ostart_0,c_comm);
     dfft_get_local_size(n[0],n_tuples_o/2,n[1],osize_1,ostart_1,c_comm);
@@ -364,7 +386,6 @@ accfft_plan*  accfft_plan_dft_3d_r2c(int * n,
     plan->T_plan_1i->alloc_local=plan->alloc_max;
 
     {
-      unsigned fftw_flags=FFTW_MEASURE;
       plan->fplan_0= fftw_plan_many_dft_r2c(1, &n[2],osize_0[0]*osize_0[1], //int rank, const int *n, int howmany
           data, NULL,					//double *in, const int *inembed,
           1, n_tuples_i,			//int istride, int idist,
@@ -439,6 +460,7 @@ accfft_plan*  accfft_plan_dft_3d_r2c(int * n,
       if(plan->iplan_2==NULL) std::cout<<"!!! fplan2 not Created !!!"<<std::endl;
     }
 
+    /*
     static int method_static_2=0;
     static int kway_static_2=0;
     if(method_static_2==0){
@@ -451,14 +473,32 @@ accfft_plan*  accfft_plan_dft_3d_r2c(int * n,
       MPI_Bcast(&kway_static_2,1, MPI_INT,0, c_comm );
       MPI_Barrier(c_comm);
     }
-    plan->T_plan_1->method=method_static_2;
-    plan->T_plan_2->method=method_static_2;
-    plan->T_plan_2i->method=method_static_2;
-    plan->T_plan_1i->method=method_static_2;
-    plan->T_plan_1->kway=kway_static_2;
-    plan->T_plan_2->kway=kway_static_2;
-    plan->T_plan_2i->kway=kway_static_2;
-    plan->T_plan_1i->kway=kway_static_2;
+    */
+    if(flags==ACCFFT_MEASURE){
+      if(coord[0]==0){
+        plan->T_plan_1->which_fast_method(plan->T_plan_1,data_out);
+      }
+    }
+    else{
+      if(coord[0]==0){
+        plan->T_plan_1->method=2;
+        plan->T_plan_1->kway=2;
+      }
+    }
+
+    MPI_Bcast(&plan->T_plan_1->method,1, MPI_INT,0, c_comm );
+    MPI_Bcast(&plan->T_plan_1->kway,1, MPI_INT,0, c_comm );
+
+    plan->T_plan_1->method =plan->T_plan_1->method;
+    plan->T_plan_2->method =plan->T_plan_1->method;
+    plan->T_plan_2i->method=plan->T_plan_1->method;
+    plan->T_plan_1i->method=plan->T_plan_1->method;
+
+    plan->T_plan_1->kway =plan->T_plan_1->kway;
+    plan->T_plan_2->kway =plan->T_plan_1->kway;
+    plan->T_plan_2i->kway=plan->T_plan_1->kway;
+    plan->T_plan_1i->kway=plan->T_plan_1->kway;
+
     plan->data=data;
   }
   return plan;
@@ -561,6 +601,11 @@ accfft_plan*  accfft_plan_dft_3d_c2c(int * n,
     plan->inplace=true;}
   else{plan->inplace=false;}
 
+  unsigned fftw_flags;
+  if(flags==ACCFFT_ESTIMATE)
+    fftw_flags=FFTW_ESTIMATE;
+  else
+    fftw_flags=FFTW_MEASURE;
   // 1D Decomposition
   if (plan->np[1]==1){
     int NX=n[0],NY=n[1],NZ=n[2];
@@ -579,7 +624,6 @@ accfft_plan*  accfft_plan_dft_3d_c2c(int * n,
     ptrdiff_t local_n1=plan->T_plan_1->local_n1;
     int N0=NX, N1=NY, N2=NZ;
 
-    unsigned fftw_flags=FFTW_MEASURE;
     plan->fplan_0= fftw_plan_many_dft(2, &n[1],plan->T_plan_1->local_n0, //int rank, const int *n, int howmany
         data, NULL,					//double *in, const int *inembed,
         1, N1*N2,			//int istride, int idist,
@@ -614,7 +658,13 @@ accfft_plan*  accfft_plan_dft_3d_c2c(int * n,
     if(plan->iplan_1==NULL) std::cout<<"!!! Forward Plan not Created !!!"<<std::endl;
 
 
-    plan->T_plan_1->which_fast_method(plan->T_plan_1,(double*)data_out);
+    if(flags==ACCFFT_MEASURE){
+      plan->T_plan_1->which_fast_method(plan->T_plan_1,(double*)data_out);
+    }
+    else{
+      plan->T_plan_1->method=2;
+      plan->T_plan_1->kway=2;
+    }
     plan->T_plan_1i->method=plan->T_plan_1->method;
     plan->T_plan_1i->kway=plan->T_plan_1->kway;
 
@@ -678,7 +728,6 @@ accfft_plan*  accfft_plan_dft_3d_c2c(int * n,
 
     {
       // fplan_0
-      unsigned fftw_flags=FFTW_MEASURE;
       plan->fplan_0= fftw_plan_many_dft(1, &n[2],osize_0[0]*osize_0[1], //int rank, const int *n, int howmany
           data, NULL,					//double *in, const int *inembed,
           1, n[2],			//int istride, int idist,
@@ -741,6 +790,7 @@ accfft_plan*  accfft_plan_dft_3d_c2c(int * n,
 
     }
 
+    /*
     static int method_static_2=0;
     static int kway_static_2=0;
     if(method_static_2==0){
@@ -753,25 +803,61 @@ accfft_plan*  accfft_plan_dft_3d_c2c(int * n,
       MPI_Bcast(&kway_static_2,1, MPI_INT,0, c_comm );
       MPI_Barrier(c_comm);
     }
-    plan->T_plan_1->method=method_static_2;
-    plan->T_plan_2->method=method_static_2;
-    plan->T_plan_2i->method=method_static_2;
-    plan->T_plan_1i->method=method_static_2;
-    plan->T_plan_1->kway=kway_static_2;
-    plan->T_plan_2->kway=kway_static_2;
-    plan->T_plan_2i->kway=kway_static_2;
-    plan->T_plan_1i->kway=kway_static_2;
+    */
+
+    if(flags==ACCFFT_MEASURE){
+      if(coord[0]==0){
+        plan->T_plan_1->which_fast_method(plan->T_plan_1,(double*)data_out);
+      }
+    }
+    else{
+      if(coord[0]==0){
+        plan->T_plan_1->method=2;
+        plan->T_plan_1->kway=2;
+      }
+    }
+
+    MPI_Bcast(&plan->T_plan_1->method,1, MPI_INT,0, c_comm );
+    MPI_Bcast(&plan->T_plan_1->kway,1, MPI_INT,0, c_comm );
+
+    plan->T_plan_1->method =plan->T_plan_1->method;
+    plan->T_plan_2->method =plan->T_plan_1->method;
+    plan->T_plan_2i->method=plan->T_plan_1->method;
+    plan->T_plan_1i->method=plan->T_plan_1->method;
+    plan->T_plan_1->kway =plan->T_plan_1->kway;
+    plan->T_plan_2->kway =plan->T_plan_1->kway;
+    plan->T_plan_2i->kway=plan->T_plan_1->kway;
+    plan->T_plan_1i->kway=plan->T_plan_1->kway;
   }
   return plan;
 
 } // accfft_plan_dft_3d_c2c
 
+/**
+ * Execute R2C plan. This function is blocking and only returns after the transform is completed.
+ * @note For inplace transforms, data_out should point to the same memory address as data, AND
+ * the plan must have been created as inplace.
+ * @param plan FFT plan created by \ref accfft_plan_dft_3d_r2c.
+ * @param data Input data in spatial domain.
+ * @param data_out Output data in frequency domain.
+ * @param timer See \ref timer for more details.
+ */
 void accfft_execute_r2c(accfft_plan* plan, double * data,Complex * data_out, double * timer){
   accfft_execute(plan,-1,data,(double*)data_out,timer);
 
   return;
 } // accfft_execute_r2c
 
+
+/**
+ * Execute C2R plan. This function is blocking and only returns after the transform is completed.
+ * @note For inplace transform, data_out should point to the same memory address as data, AND
+ * the plan must have been created as inplace.
+ * @param plan FFT plan created by \ref accfft_plan_dft_3d_r2c.
+ * @param data Input data in frequency domain.
+ * @param data_out Output data in frequency domain.
+ * @param timer See \ref timer for more details.
+ */
 void accfft_execute_c2r(accfft_plan* plan, Complex * data,double * data_out, double * timer){
   accfft_execute(plan,1,(double*)data,data_out,timer);
 
@@ -866,7 +952,7 @@ void accfft_execute(accfft_plan* plan, int direction,double * data,double * data
 
 
 
-      plan->T_plan_2->execute(plan->T_plan_2,plan->data_out,timings,2,1,coords[1]);
+      plan->T_plan_2->execute(plan->T_plan_2,data_out,timings,2,1,coords[1]);
       /**************************************************************/
       /*******************  N0 x N1/P0 x N2/P1 **********************/
       /**************************************************************/
@@ -913,6 +999,15 @@ void accfft_execute(accfft_plan* plan, int direction,double * data,double * data
   return;
 } // accfft_execute
 
+/**
+ * Execute C2C plan. This function is blocking and only returns after the transform is completed.
+ * @note For inplace transforms, data_out should point to the same memory address as data, AND
+ * the plan must have been created as inplace.
+ * @param plan FFT plan created by \ref accfft_plan_dft_3d_r2c.
+ * @param data Input data in frequency domain.
+ * @param data_out Output data in frequency domain.
+ * @param timer See \ref timer for more details.
+ */
 void accfft_execute_c2c(accfft_plan* plan, int direction,Complex * data, Complex * data_out, double * timer){
 
   if(data==NULL)
@@ -1046,21 +1141,28 @@ void accfft_execute_c2c(accfft_plan* plan, int direction,Complex * data, Complex
   return;
 } // accfft_execute_c2c
 
+/**
+ * Destroy AccFFT CPU plan.
+ * @param plan Input plan to be destroyed.
+ */
 void accfft_destroy_plan(accfft_plan * plan){
 
-  if(plan->T_plan_1!=NULL)delete(plan->T_plan_1);
-  if(plan->T_plan_1i!=NULL)delete(plan->T_plan_1i);
-  if(plan->T_plan_2!=NULL)delete(plan->T_plan_2);
-  if(plan->T_plan_2i!=NULL)delete(plan->T_plan_2i);
-  if(plan->Mem_mgr!=NULL)delete(plan->Mem_mgr);
-  if(plan->fplan_0!=NULL)fftw_destroy_plan(plan->fplan_0);
-  if(plan->fplan_1!=NULL)fftw_destroy_plan(plan->fplan_1);
-  if(plan->fplan_2!=NULL)fftw_destroy_plan(plan->fplan_2);
-  if(plan->iplan_0!=NULL)fftw_destroy_plan(plan->iplan_0);
-  if(plan->iplan_1!=NULL)fftw_destroy_plan(plan->iplan_1);
-  if(plan->iplan_2!=NULL)fftw_destroy_plan(plan->iplan_2);
+  if(plan!=NULL){
+    if(plan->T_plan_1!=NULL)  delete(plan->T_plan_1);
+    if(plan->T_plan_1i!=NULL) delete(plan->T_plan_1i);
+    if(plan->T_plan_2!=NULL)  delete(plan->T_plan_2);
+    if(plan->T_plan_2i!=NULL) delete(plan->T_plan_2i);
+    if(plan->Mem_mgr!=NULL)   delete(plan->Mem_mgr);
+    if(plan->fplan_0!=NULL) fftw_destroy_plan(plan->fplan_0);
+    if(plan->fplan_1!=NULL) fftw_destroy_plan(plan->fplan_1);
+    if(plan->fplan_2!=NULL) fftw_destroy_plan(plan->fplan_2);
+    if(plan->iplan_0!=NULL) fftw_destroy_plan(plan->iplan_0);
+    if(plan->iplan_1!=NULL) fftw_destroy_plan(plan->iplan_1);
+    if(plan->iplan_2!=NULL) fftw_destroy_plan(plan->iplan_2);
 
-  MPI_Comm_free(&plan->row_comm);
-  MPI_Comm_free(&plan->col_comm);
+    MPI_Comm_free(&plan->row_comm);
+    MPI_Comm_free(&plan->col_comm);
+    delete plan;
+  }
 
 } // accfft_destroy_plan
